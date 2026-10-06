@@ -78,34 +78,26 @@
   });
   document.body.classList.add("lock"); // 시작 페이지는 차트(고정)
 
-  // ---------- 사운드/진동/알림 ----------
+  // ---------- 사운드 (WebAudio 부드러운 음 2종, 음성 없음) ----------
   let actx = null;
-  function beep(f, dur, delay) {
+  function tone(freq, dur, delay, vol) {
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
       if (actx.state === "suspended") actx.resume();
       const t = actx.currentTime + (delay || 0);
       const o = actx.createOscillator(), g = actx.createGain();
-      o.type = "sine"; o.frequency.value = f;
+      o.type = "sine"; o.frequency.value = freq;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(vol || 0.25, t + 0.03);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       o.connect(g); g.connect(actx.destination);
       o.start(t); o.stop(t + dur + 0.05);
     } catch (_) {}
   }
   function playAlert(type) {
-    const a = $("alertAudio");
-    try {
-      if (a && a.src && a.src.indexOf("alert.wav") >= 0) { a.currentTime = 0; a.play().catch(() => beepFallback()); }
-      else beepFallback();
-    } catch (_) { beepFallback(); }
-    function beepFallback() {
-      if (type === "PC") { beep(660, 0.2, 0); beep(880, 0.25, 0.22); }
-      else if (type === "BB") { beep(520, 0.2, 0); beep(780, 0.25, 0.22); }
-      else { beep(440, 0.2, 0); beep(660, 0.2, 0.2); beep(880, 0.3, 0.4); }
-    }
-    if ($("pVibrate").checked && navigator.vibrate) { try { navigator.vibrate([200, 100, 200]); } catch (_) {} }
+    if ($("pSnd").value === "long") { tone(523, 0.3, 0, 0.22); tone(784, 0.45, 0.28, 0.22); }
+    else { tone(880, 0.14, 0, 0.2); }
+    if ($("pVibrate").checked && navigator.vibrate) { try { navigator.vibrate([120]); } catch (_) {} }
   }
   async function notify(title, body) {
     if (!$("pNotify").checked) return;
@@ -147,7 +139,7 @@
     return out.length ? out : ["30m"];
   }
   function persistParams() {
-    S_save("params", { pc: $("pPCLen").value, bbn: $("pBBN").value, bbk: $("pBBK").value, ma: $("pMA").value, voln: $("pVolN").value, volk: $("pVolK").value, cpc: $("cPC").checked, cbb: $("cBB").checked, cma: $("cMA200").checked, cvol: $("cVol").checked, scan: $("pScanSec").value, poll: $("pollSec").value, w: watchTFs() });
+    S_save("params", { pc: $("pPCLen").value, bbn: $("pBBN").value, bbk: $("pBBK").value, ma: $("pMA").value, voln: $("pVolN").value, volk: $("pVolK").value, cpc: $("cPC").checked, cbb: $("cBB").checked, cma: $("cMA200").checked, cvol: $("cVol").checked, scan: $("pScanSec").value, poll: $("pollSec").value, w: watchTFs(), snd: $("pSnd").value });
   }
   function restoreParams() {
     const p = S_load("params", null);
@@ -158,6 +150,7 @@
     $("cMA200").checked = p.cma !== false; $("cVol").checked = p.cvol === true;
     if (p.scan) $("pScanSec").value = p.scan;
     if (p.poll) $("pollSec").value = p.poll;
+    if (p.snd) $("pSnd").value = p.snd;
     if (p.w) { $("w1m").checked = p.w.includes("1m"); $("w3m").checked = p.w.includes("3m"); $("w5m").checked = p.w.includes("5m"); $("w15m").checked = p.w.includes("15m"); $("w30m").checked = p.w.includes("30m"); $("w1h").checked = p.w.includes("1h"); $("w4h").checked = p.w.includes("4h"); $("w1D").checked = p.w.includes("1D"); }
   }
 
@@ -864,7 +857,7 @@
     };
   });
   $("pWake").onchange = keepAwake;
-  $("btnTestSound").onclick = () => { playAlert("PC"); setTimeout(() => playAlert("BB"), 600); log("테스트음 재생"); };
+  $("btnTestSound").onclick = () => { playAlert("PC"); log("테스트음 재생"); };
   $("btnScanNow").onclick = () => scanAll(true);
   $("btnPollNow").onclick = async () => { await loadChart(true); scanAll(true); };
   $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); fires.length = 0; boardOrder = []; boardOrderTs = 0; hitMarks.clear(); lastHits.clear(); buyMarks.clear(); markIdx = null; renderStrip(); draw(); };
