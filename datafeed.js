@@ -13,7 +13,7 @@
     "4h": { sec: 14400, interval: "60m", range: "3mo", resample: 14400, minAge: 30 * 60 * 1000 },
     "1D": { sec: 86400, interval: "1d", range: "2y", minAge: 2 * 60 * 60 * 1000 },
   };
-  const IDX = { KOSPI: "^KS11", KOSPI200: "^KS200", KOSDAQ: "^KQ11", US100: "^NDX", IXIC: "^IXIC" };
+  const IDX = { KOSPI: "^KS11", KOSPI200: "^KS200", KOSDAQ: "^KQ11", US100: "^NDX", NDX: "^NDX", IXIC: "^IXIC", COMP: "^IXIC" };
 
   function candidates(symbol) {
     const s = String(symbol || "").trim().toUpperCase();

@@ -5,10 +5,11 @@
   const TFS = Feed30m.TFS;
   const TF_LABEL = { "1m": "1분", "3m": "3분", "5m": "5분", "15m": "15분", "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
 
-  // 첨부 관심종목.txt 기본 탑재 (첫 실행 시 자동 등록)
+  // 첨부 관심종목.txt 기본 탑재 (첫 실행·버전업 시 자동 등록, 중복은 첫 이름 유지)
+  const SYMVER = 2;
   const DEFAULT_SYMS = [
     { id: "KOSPI", name: "KOSPI" }, { id: "KOSPI200", name: "KOSPI200" }, { id: "KOSDAQ", name: "KOSDAQ" },
-    { id: "US100", name: "US100 나스닥100" }, { id: "IXIC", name: "IXIC 나스닥종합" },
+    { id: "COMP", name: "나스닥 종합" }, { id: "US100", name: "나스닥100" }, { id: "NDX", name: "나스닥100" }, { id: "IXIC", name: "나스닥종합" },
     { id: "102110", name: "TIGER200" }, { id: "069500", name: "코덱스200" }, { id: "148020", name: "RISE200" },
     { id: "395270", name: "HANARO Fn-K반도체" }, { id: "396500", name: "TIGER반도체TOP10" },
     { id: "476260", name: "HANARO 반도체핵심공정주도주" }, { id: "471990", name: "KODEX AI반도체핵심장비" },
@@ -16,12 +17,26 @@
     { id: "232080", name: "TIGER 코스닥150" }, { id: "261060", name: "TIGER 코스닥150IT" },
     { id: "123310", name: "TIGER 타이거인버스" }, { id: "114800", name: "KODEX 인버스" },
     { id: "337140", name: "KODEX 대형주" }, { id: "277640", name: "TIGER 대형주" },
-    { id: "448300", name: "나스닥100(H)" }, { id: "449190", name: "나스닥100(H)" }, { id: "453080", name: "나스닥100(H)" },
+    { id: "448300", name: "TIGER 나스닥100(H)" }, { id: "449190", name: "KODEX 나스닥100(H)" }, { id: "453080", name: "KIWOOM 나스닥100(H)" },
+    { id: "133690", name: "TIGER 미국나스닥100" }, { id: "379810", name: "KODEX 미국나스닥100" }, { id: "426030", name: "TIME 미국나스닥100액티브" },
     { id: "448290", name: "S&P500(H)" }, { id: "449180", name: "S&P500(H)" },
-    { id: "466920", name: "솔 조선" }, { id: "228790", name: "TIGER 화장품" }, { id: "449450", name: "한화 플러스 방산" },
+    { id: "466920", name: "SOL 조선" }, { id: "228790", name: "TIGER 화장품" }, { id: "449450", name: "한화 플러스 방산" },
     { id: "161510", name: "PLUS 고배당" }, { id: "004380", name: "TIGER 머니마켓액티브" }, { id: "458730", name: "TIGER 미국배당다우존스" },
-    { id: "BTC/KRW", name: "BTC/KRW" }, { id: "ETH/KRW", name: "ETH/KRW" },
-    { id: "SOL/KRW", name: "SOL/KRW" }, { id: "XRP/KRW", name: "XRP/KRW" },
+    { id: "091160", name: "KODEX 반도체" },
+    { id: "139230", name: "TIGER 200 중공업" }, { id: "465580", name: "ACE미국빅테크TOP7 PLUS" }, { id: "487240", name: "KODEX AI전력핵심설비" },
+    { id: "139270", name: "TIGER 200 금융" }, { id: "139240", name: "TIGER 200 철강강관" }, { id: "117460", name: "KODEX 에너지화학" },
+    { id: "139250", name: "TIGER 200 에너지화학" }, { id: "229200", name: "KODEX 코스닥150" }, { id: "266390", name: "KODEX 경기소비재" },
+    { id: "266420", name: "KODEX 헬스케어" }, { id: "453640", name: "KODEX 미국S&P500헬스케어" }, { id: "227560", name: "TIGER200 생활소비재" },
+    { id: "266410", name: "KODEX 필수소비재" }, { id: "453630", name: "KODEX 미국S&P500필수소비재" }, { id: "453660", name: "KODEX 미국S&P500경기소비재" },
+    { id: "139290", name: "TIGER200 경기소비재" }, { id: "252670", name: "KODEX 200선물인버스2X" },
+    { id: "360750", name: "TIGER 미국S&P500" }, { id: "379800", name: "KODEX 미국S&P500" }, { id: "314250", name: "KODEX 미국빅테크10(H)" },
+    { id: "381180", name: "TIGER 미국필라델피아반도체나스닥" }, { id: "487230", name: "KODEX 미국AI전력인프라" }, { id: "203780", name: "TIGER 미국나스닥바이오" },
+    { id: "494840", name: "TIGER 미국방산" }, { id: "446720", name: "SOL 미국배당다우존스" },
+    { id: "476550", name: "KODEX 미국30년국채타겟커버드콜(H)" },
+    { id: "373590", name: "TIGER 미국S&P500채권혼합3070" }, { id: "485230", name: "ACE 미국S&P500채권혼합4060" },
+    { id: "484120", name: "KODEX 미국나스닥100TR채권혼합4060" }, { id: "483320", name: "SOL 미국배당다우존스채권혼합50" },
+    { id: "BTC/KRW", name: "비트코인" }, { id: "ETH/KRW", name: "이더리움" },
+    { id: "SOL/KRW", name: "솔라나" }, { id: "XRP/KRW", name: "엑스알피" },
   ];
 
   // ---------- 상태 ----------
@@ -504,14 +519,19 @@
 
   // ---------- 종목/차트 로드 ----------
   function parseCodeText(text) {
-    return String(text || "").split(/[\n,;]+/).map(s => s.trim()).filter(Boolean).map(line => {
-      if (/^#/.test(line)) return null;
-      const m = line.match(/(\d{6}|[A-Z.\-^]{1,12}|BTC\/KRW|ETH\/KRW|SOL\/KRW|XRP\/KRW)/i);
-      if (!m) return null;
-      const id = m[1].toUpperCase();
-      const name = line.replace(m[1], "").trim();
-      return { id, name: name || id };
-    }).filter(Boolean);
+    const out = [];
+    let skipped = 0;
+    String(text || "").split(/[\n,;]+/).forEach(line => {
+      line = line.trim();
+      if (!line || /^#/.test(line)) return;
+      const raw = line.split(/\s+/)[0];
+      const id = raw.toUpperCase();
+      const ok = /^\d{6}$/.test(id) || /^(BTC|ETH|SOL|XRP)\/KRW$/.test(id) || /^[A-Z.\-^=]{2,12}$/.test(id);
+      if (!ok) { skipped++; return; }
+      out.push({ id, name: line.slice(raw.length).trim() || id });
+    });
+    if (skipped) log(`형식 오류 ${skipped}줄 건너뜀 (6자리 번호·티커 확인)`);
+    return out;
   }
   async function selectSymbol(id) {
     symbol = id;
@@ -866,6 +886,12 @@
 
   // ---------- 시작 ----------
   restoreParams(); restoreSyms();
+  if (S_load("symver", 0) < SYMVER) {
+    const n = feed.addSymbols(DEFAULT_SYMS);
+    S_save("symver", SYMVER);
+    persistSyms();
+    if (n) log(`새 관심종목 ${n}개 추가 (기존 유지)`);
+  }
   if (!symbol) symbol = feed.symbols[0].id;
   feed.pollSec = Math.max(15, +$("pollSec").value || 20);
   renderTFBar(); updateCurSym(); renderWatchlist(); setConn(); keepAwake();
