@@ -328,31 +328,6 @@
       ctx.fillText(label, 8 * dpr, baseY - volH - 6 * dpr);
       ctx.restore();
     })();
-    // 신호 자리 매수 라벨 (봉 저가 아래)
-    if (buyMarks.size) {
-      if (!markIdx || markIdx.bars !== bars) {
-        const m = new Map();
-        bars.forEach((b, bi) => m.set(b.time, bi));
-        markIdx = { bars, map: m };
-      }
-      const MCOL = { PC: "#b78a00", BB: "#2f6fdd", MA200: "#8e3aa8", VOL: "#1e8e7e" };
-      ctx.font = `bold ${10 * dpr}px sans-serif`;
-      buyMarks.forEach(mk => {
-        if (mk.symId !== symbol || mk.tfKey !== tf) return;
-        const bi = markIdx.map.get(mk.barTime);
-        if (bi == null) return;
-        const vi = bi - gi;
-        if (vi < 0 || vi >= view.length) return;
-        const bx = (vi + 0.5) * stepX;
-        const by = Math.min(y(mk.price) + 4 * dpr, priceH - 2 * dpr);
-        const label = "매수";
-        const tw = ctx.measureText(label).width + 10 * dpr;
-        ctx.fillStyle = MCOL[mk.type] || "#2962ff";
-        ctx.fillRect(bx - tw / 2, by, tw, 16 * dpr);
-        ctx.fillStyle = "#fff";
-        ctx.fillText(label, bx - tw / 2 + 5 * dpr, by + 12 * dpr);
-      });
-    }
     ctx.strokeStyle = upLast ? "#26a69a" : "#ef5350";
     ctx.setLineDash([4 * dpr, 3 * dpr]);
     ctx.beginPath(); ctx.moveTo(0, y(last.close)); ctx.lineTo(plotW, y(last.close)); ctx.stroke();
@@ -395,6 +370,32 @@
       ctx.fillText(fmtAxis(view[i].time), Math.min(Math.max(x, 30 * dpr), plotW - 30 * dpr), bodyH + 14 * dpr);
     }
     ctx.textAlign = "left";
+    // 신호 자리 매수 라벨 (맨 위에 그려 가려지지 않게)
+    if (buyMarks.size) {
+      if (!markIdx || markIdx.bars !== bars) {
+        const m = new Map();
+        bars.forEach((b, bi) => m.set(b.time, bi));
+        markIdx = { bars, map: m };
+      }
+      const MCOL = { PC: "#b78a00", BB: "#2f6fdd", MA200: "#8e3aa8", VOL: "#1e8e7e" };
+      ctx.font = `bold ${10 * dpr}px sans-serif`;
+      ctx.textAlign = "left";
+      buyMarks.forEach(mk => {
+        if (mk.symId !== symbol || mk.tfKey !== tf) return;
+        const bi = markIdx.map.get(mk.barTime);
+        if (bi == null) return;
+        const vi = bi - gi;
+        if (vi < 0 || vi >= view.length) return;
+        const label = "매수";
+        const tw = ctx.measureText(label).width + 10 * dpr;
+        const bx = Math.min(Math.max((vi + 0.5) * stepX, tw / 2 + 2 * dpr), plotW - tw / 2 - 2 * dpr);
+        const by = Math.min(y(mk.price) + 4 * dpr, priceH - 2 * dpr);
+        ctx.fillStyle = MCOL[mk.type] || "#2962ff";
+        ctx.fillRect(bx - tw / 2, by, tw, 16 * dpr);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(label, bx - tw / 2 + 5 * dpr, by + 12 * dpr);
+      });
+    }
   }
   function fmtPx(v) {
     if (v >= 1000) return Math.round(v).toLocaleString("ko-KR");
@@ -525,12 +526,23 @@
     document.querySelectorAll("#tfBar button").forEach(b => b.classList.toggle("active", b.dataset.tf === tf));
   }
 
-  // ---------- 차트 하단 종목 스트립 ----------
+  // ---------- 차트 하단 종목 스트립 (빈칸 없이 꽉 채우기) ----------
   let stripX = 0, stripMoved = false;
   const hitMarks = new Map(); // id -> {type, time} — 신호 발생 종목 표시용
+  function stripCols(n) {
+    const c = [3, 4, 5, 6];
+    let best = 3, br = 99;
+    for (const k of c) {
+      const r = n % k;
+      if (r === 0) return k;
+      if (r < br) { br = r; best = k; }
+    }
+    return best;
+  }
   function renderStrip() {
     const el = $("symStrip");
     el.innerHTML = "";
+    el.style.gridTemplateColumns = `repeat(${stripCols(feed.symbols.length)}, 1fr)`;
     feed.symbols.forEach(s => {
       const b = document.createElement("button");
       b.textContent = (s.name && s.name !== s.id) ? `${s.id} ${s.name}` : s.id;
