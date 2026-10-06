@@ -33,6 +33,8 @@
   let unsub = null;
   let follow = true, perRow = 9, offset = 0;
   const fired = new Set(); // symbol@tf@barTime@type
+  const buyMarks = new Map(); // key -> {symId, tfKey, barTime, type, price} — 차트 매수 라벨용
+  let markIdx = null; // {bars, map} 시간→인덱스 캐시
   function S_load(k, d) { try { const v = localStorage.getItem("a30_" + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }
   function S_save(k, v) { try { localStorage.setItem("a30_" + k, JSON.stringify(v)); } catch (_) {} }
 
@@ -277,6 +279,31 @@
     }
     const last = bars[bars.length - 1];
     const upLast = last.close >= last.open;
+    // 신호 자리 매수 라벨 (봉 저가 아래)
+    if (buyMarks.size) {
+      if (!markIdx || markIdx.bars !== bars) {
+        const m = new Map();
+        bars.forEach((b, bi) => m.set(b.time, bi));
+        markIdx = { bars, map: m };
+      }
+      const MCOL = { PC: "#b78a00", BB: "#2f6fdd", MA200: "#8e3aa8", VOL: "#1e8e7e" };
+      ctx.font = `bold ${10 * dpr}px sans-serif`;
+      buyMarks.forEach(mk => {
+        if (mk.symId !== symbol || mk.tfKey !== tf) return;
+        const bi = markIdx.map.get(mk.barTime);
+        if (bi == null) return;
+        const vi = bi - gi;
+        if (vi < 0 || vi >= view.length) return;
+        const bx = (vi + 0.5) * stepX;
+        const by = Math.min(y(mk.price) + 4 * dpr, priceH - 2 * dpr);
+        const label = "매수";
+        const tw = ctx.measureText(label).width + 10 * dpr;
+        ctx.fillStyle = MCOL[mk.type] || "#2962ff";
+        ctx.fillRect(bx - tw / 2, by, tw, 16 * dpr);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(label, bx - tw / 2 + 5 * dpr, by + 12 * dpr);
+      });
+    }
     ctx.strokeStyle = upLast ? "#26a69a" : "#ef5350";
     ctx.setLineDash([4 * dpr, 3 * dpr]);
     ctx.beginPath(); ctx.moveTo(0, y(last.close)); ctx.lineTo(plotW, y(last.close)); ctx.stroke();
@@ -360,10 +387,12 @@
     $("alertToast").hidden = true;
     document.querySelector('[data-page="page-alert"]').click();
   };
-  function fire(symId, tfKey, barTime, hit, isLive) {
+  function fire(symId, tfKey, barTime, hit, isLive, price) {
     const key = `${symId}@${tfKey}@${barTime}@${hit.type}`;
     if (fired.has(key)) return;
     fired.add(key);
+    buyMarks.set(key, { symId, tfKey, barTime, type: hit.type, price });
+    if (buyMarks.size > 300) buyMarks.delete(buyMarks.keys().next().value);
     playAlert(hit.type);
     notify(`[${tfKey}] ${symId} ${hit.type}`, hit.label);
     alertLog(`[${tfKey}] ${symId} · ${hit.label}${isLive ? " (진행봉)" : " (완성봉)"}`, hit.type);
@@ -384,7 +413,7 @@
     if (symId === symbol && tfKey === tf) ind = computed;
     const i = allBars.length - (live ? 1 : 2);
     if (i < 1) return;
-    Alerter.evalBar(allBars, computed, i, p).forEach(h => fire(symId, tfKey, allBars[i].time, h, live));
+    Alerter.evalBar(allBars, computed, i, p).forEach(h => fire(symId, tfKey, allBars[i].time, h, live, allBars[i].low));
   }
 
   // ---------- 종목/차트 로드 ----------
@@ -575,7 +604,7 @@
   $("btnTestSound").onclick = () => { playAlert("PC"); setTimeout(() => playAlert("BB"), 600); log("테스트음 재생"); };
   $("btnScanNow").onclick = () => scanAll(true);
   $("btnPollNow").onclick = async () => { await loadChart(true); scanAll(true); };
-  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); hitMarks.clear(); renderStrip(); };
+  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); hitMarks.clear(); buyMarks.clear(); markIdx = null; renderStrip(); draw(); };
   document.querySelector('[data-page="page-alert"]').addEventListener("click", () => { $("alertBadge").hidden = true; });
 
   function addCodes(text) {
