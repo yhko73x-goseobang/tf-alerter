@@ -1,4 +1,7 @@
-/* datafeed.js — 야후 파이낸스 멀티시간대 (30m/1h/4h/1D, 키/PC 불필요) */
+/* datafeed.js — 야후 멀티시간대 (30m/1h/4h/1D) + 공개프록시 폴백
+ * 폰 웹뷰에서 야후가 HTML 차단 페이지를 줄 때가 있어 쿠키 확보 → query1 → query2 → 공개프록시 순으로 시도.
+ * 키/PC 불필요.
+ */
 (function (global) {
   const TFS = {
     "30m": { sec: 1800, interval: "30m", range: "3mo", minAge: 60 * 1000 },
@@ -23,20 +26,39 @@
     return [s];
   }
 
-  async function fetchJson(url) {
-    const urls = [url, url.replace("query1.", "query2.")];
+  // 야후 쿠키 확보 (차단 페이지 회피용, 1회만)
+  let cookieReady = false;
+  async function ensureCookie() {
+    if (cookieReady) return;
+    cookieReady = true;
+    try { await fetch("https://fc.yahoo.com", { mode: "no-cors", credentials: "include" }); } catch (_) {}
+  }
+
+  async function fetchYahooJson(url) {
+    await ensureCookie();
+    const direct = [url, url.replace("query1.", "query2.")];
     let err = null;
-    for (const u of urls) {
+    for (const u of direct) {
       try {
-        const r = await fetch(u);
-        if (!r.ok) { err = new Error("HTTP " + r.status); continue; }
-        return await r.json();
+        const r = await fetch(u, { credentials: "include", headers: { Accept: "application/json" } });
+        const t = await r.text();
+        if (!r.ok) { err = new Error("야후 HTTP " + r.status); continue; }
+        if (t.charAt(0) === "<") { err = new Error("야후 차단페이지 응답"); continue; }
+        return JSON.parse(t);
       } catch (e) { err = e; }
     }
+    // 공개 프록시 경유 (서버 없이 폰에서 직접)
+    try {
+      const r = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(url));
+      const t = await r.text();
+      if (r.ok && t.charAt(0) !== "<") return JSON.parse(t);
+      err = new Error("프록시 경유 실패");
+    } catch (e) { err = e; }
+    // 로컬 프록시 (PC 서버 켜져 있을 때만)
     try {
       const r = await fetch("/yahoo-api?url=" + encodeURIComponent(url));
       if (r.ok) return await r.json();
-    } catch (e) { err = e; }
+    } catch (_) {}
     throw err || new Error("야후 조회 실패");
   }
 
@@ -52,6 +74,30 @@
     return out;
   }
 
+  // 1D 최후 수단은 야후 일봉 재시도 없이 그대로 실패 전달 (캐시 유지)
+
+  function barsFromYahoo(j) {
+    const res = j && j.chart && j.chart.result && j.chart.result[0];
+    if (!res) {
+      const e = j && j.chart && j.chart.error;
+      throw new Error(e ? ("야후: " + (e.description || e.code || "데이터 없음")) : "야후 데이터 없음");
+    }
+    const ts = res.timestamp || [];
+    const q = (res.indicators && res.indicators.quote && res.indicators.quote[0]) || {};
+    const bars = [];
+    for (let i = 0; i < ts.length; i++) {
+      const c = q.close && q.close[i];
+      if (c == null) continue;
+      bars.push({
+        time: ts[i],
+        open: q.open[i] ?? c, high: q.high[i] ?? c,
+        low: q.low[i] ?? c, close: c,
+        volume: q.volume[i] || 0,
+      });
+    }
+    return bars;
+  }
+
   async function fetchBars(symbol, tfKey) {
     const tf = TFS[tfKey] || TFS["30m"];
     const isCrypto = /^(BTC|ETH|SOL|XRP)[\/\-]?(KRW|USD)?$/i.test(String(symbol).trim());
@@ -59,31 +105,18 @@
     let lastErr = null;
     for (const yh of candidates(symbol)) {
       try {
-        const j = await fetchJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yh)}?interval=${tf.interval}&range=${range}`);
-        const res = j && j.chart && j.chart.result && j.chart.result[0];
-        const ts = (res && res.timestamp) || [];
-        const q = (res && res.indicators && res.indicators.quote && res.indicators.quote[0]) || {};
-        let bars = [];
-        for (let i = 0; i < ts.length; i++) {
-          const c = q.close && q.close[i];
-          if (c == null) continue;
-          bars.push({
-            time: ts[i],
-            open: q.open[i] ?? c, high: q.high[i] ?? c,
-            low: q.low[i] ?? c, close: c,
-            volume: q.volume[i] || 0,
-          });
-        }
+        const j = await fetchYahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yh)}?interval=${tf.interval}&range=${range}`);
+        let bars = barsFromYahoo(j);
         if (tf.resample) bars = resample(bars, tf.resample);
         else if (tfKey === "1D") bars = resample(bars, 86400);
         if (bars.length > 5) {
           if (/^\d{6}\.(KS|KQ)$/.test(yh)) Feed.resolved[String(symbol).trim().toUpperCase()] = yh;
           return bars.slice(-400);
         }
-        lastErr = new Error(yh + "/" + tfKey + ": 데이터 부족");
+        lastErr = new Error(yh + "/" + tfKey + ": 봉 부족");
       } catch (e) { lastErr = e; }
     }
-    throw lastErr || new Error(symbol + "/" + tfKey + ": 야후 데이터 없음");
+    throw lastErr || new Error(symbol + "/" + tfKey + ": 데이터 없음");
   }
 
   class Feed {
@@ -152,7 +185,7 @@
       this._timer = setInterval(async () => {
         for (const s of this.symbols) {
           try { await this.getBars(s.id, mainTf); this.emitLive(s.id, mainTf); }
-          catch (e) { this.log(`야후 폴링 실패 ${s.id}/${mainTf}: ${e.message}`); }
+          catch (e) { this.log(`수신 실패 ${s.id}/${mainTf}: ${e.message}`); }
           await new Promise(r => setTimeout(r, 300));
         }
         onCycle && onCycle();
