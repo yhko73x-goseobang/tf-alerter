@@ -6,7 +6,7 @@
   const TF_LABEL = { "1m": "1분", "3m": "3분", "5m": "5분", "15m": "15분", "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
 
   // 첨부 관심종목.txt 기본 탑재 (첫 실행·버전업 시 자동 등록, 중복은 첫 이름 유지)
-  const SYMVER = 2;
+  const SYMVER = 3;
   const DEFAULT_SYMS = [
     { id: "KOSPI", name: "KOSPI" }, { id: "KOSPI200", name: "KOSPI200" }, { id: "KOSDAQ", name: "KOSDAQ" },
     { id: "COMP", name: "나스닥 종합" }, { id: "US100", name: "나스닥100" }, { id: "NDX", name: "나스닥100" }, { id: "IXIC", name: "나스닥종합" },
@@ -32,7 +32,9 @@
     { id: "360750", name: "TIGER 미국S&P500" }, { id: "379800", name: "KODEX 미국S&P500" }, { id: "314250", name: "KODEX 미국빅테크10(H)" },
     { id: "381180", name: "TIGER 미국필라델피아반도체나스닥" }, { id: "487230", name: "KODEX 미국AI전력인프라" }, { id: "203780", name: "TIGER 미국나스닥바이오" },
     { id: "494840", name: "TIGER 미국방산" }, { id: "446720", name: "SOL 미국배당다우존스" },
+    { id: "0008S0", name: "TIGER 미국배당다우존스타겟데일리커버드콜" },
     { id: "476550", name: "KODEX 미국30년국채타겟커버드콜(H)" },
+    { id: "0238P0", name: "TIGER 미국S&P500미국채혼합50" },
     { id: "373590", name: "TIGER 미국S&P500채권혼합3070" }, { id: "485230", name: "ACE 미국S&P500채권혼합4060" },
     { id: "484120", name: "KODEX 미국나스닥100TR채권혼합4060" }, { id: "483320", name: "SOL 미국배당다우존스채권혼합50" },
     { id: "BTC/KRW", name: "비트코인" }, { id: "ETH/KRW", name: "이더리움" },
@@ -526,7 +528,7 @@
       if (!line || /^#/.test(line)) return;
       const raw = line.split(/\s+/)[0];
       const id = raw.toUpperCase();
-      const ok = /^\d{6}$/.test(id) || /^(BTC|ETH|SOL|XRP)\/KRW$/.test(id) || /^[A-Z.\-^=]{2,12}$/.test(id);
+      const ok = /^[A-Z0-9]{6}$/.test(id) || /^(BTC|ETH|SOL|XRP)\/KRW$/.test(id) || /^[A-Z.\-^=]{2,12}$/.test(id);
       if (!ok) { skipped++; return; }
       out.push({ id, name: line.slice(raw.length).trim() || id });
     });
@@ -874,6 +876,32 @@
     e.target.value = "";
   });
   $("btnSample").onclick = () => { addCodes(DEFAULT_SYMS.map(s => `${s.id} ${s.name}`).join("\n")); };
+  $("btnCopyWatch").onclick = async () => {
+    const text = feed.symbols.map(s => `${s.id}${s.name && s.name !== s.id ? " " + s.name : ""}`).join("\n");
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+      else {
+        const ta = document.createElement("textarea");
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); ta.remove();
+      }
+      log(`목록 복사됨: ${feed.symbols.length}개`);
+      alert("복사됐어. 메모장에 붙여넣어줘.");
+    } catch (e) { alert("복사 실패: " + (e.message || e)); }
+  };
+  $("btnExportWatch").onclick = () => {
+    const text = feed.symbols.map(s => `${s.id}${s.name && s.name !== s.id ? " " + s.name : ""}`).join("\n");
+    try {
+      const blob = new Blob(["\ufeff" + text], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "관심종목-내보내기.txt";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+      log(`목록 다운로드: ${feed.symbols.length}개`);
+    } catch (e) { alert("다운로드 실패: " + (e.message || e)); }
+  };
 
   function setConn() {
     const dot = $("connDot"), txt = $("connText");
