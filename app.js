@@ -618,14 +618,20 @@
     const now = Date.now();
     while (fires.length && now - fires[0].wall > 48 * 3600000) fires.shift();
     if (fires.length > 3000) fires.splice(0, fires.length - 3000);
-    const cntHour = new Map(), seqWin = new Map(), lastMap = new Map();
+    const cntHour = new Map(), rankMap = new Map(), lastMap = new Map();
     fires.forEach(f => {
       if (now - f.wall < 3600000) cntHour.set(f.symId, (cntHour.get(f.symId) || 0) + 1);
-      if (f.seq && now - f.wall < tfWindowMs(f.tfKey)) {
-        const k = f.symId + "|" + f.tfKey;
-        if (f.seq > (seqWin.get(k) || 0)) seqWin.set(k, f.seq);
+      if (now - f.wall < tfWindowMs(f.tfKey)) {
+        let m = rankMap.get(f.symId);
+        if (!m) { m = new Map(); rankMap.set(f.symId, m); }
+        if (!m.has(f.tfKey) || m.get(f.tfKey) < f.wall) m.set(f.tfKey, f.wall);
       }
       if (!lastMap.has(f.symId) || lastMap.get(f.symId) < f.wall) lastMap.set(f.symId, f.wall);
+    });
+    // 종목마다 신호 시간대를 최신순으로 1~8위 매김
+    rankMap.forEach((m, sym) => {
+      const order = [...m.entries()].sort((a, b) => b[1] - a[1]);
+      rankMap.set(sym, new Map(order.map(([t], i) => [t, i + 1])));
     });
     const info = feed.symbols.map((s, idx) => ({
       s, idx,
@@ -665,13 +671,13 @@
       nm.onclick = () => { tf = "1D"; persistSyms(); renderTFBar(); selectSymbol(id); };
       row.appendChild(nm);
       TF_ORDER.forEach(t => {
-        const sq = seqWin.get(id + "|" + t) || 0;
+        const rk = (rankMap.get(id) || new Map()).get(t) || 0;
         const c = document.createElement("button");
         c.className = "sb-cell";
         c.title = `${id} · ${t} 차트로 이동`;
         c.onclick = () => { tf = t; persistSyms(); renderTFBar(); selectSymbol(id); };
-        if (sq > 0) {
-          c.textContent = sq; // 최신 신호일수록 큰 숫자
+        if (rk > 0) {
+          c.textContent = rk; // 종목 내 최신 신호 시간대가 1위
           c.style.background = TFCOL[t];
           c.style.color = TFTXT[t] || "#fff";
         }
