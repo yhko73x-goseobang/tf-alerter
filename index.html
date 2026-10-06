@@ -113,14 +113,10 @@
     <div class="card">
       <h3>📋 종목 (터치 → 차트)</h3>
       <div class="row">
-        <input id="quickCode" type="text" placeholder="종목번호 (예: 005930)" maxlength="30" />
-        <button id="btnQuickAdd">추가</button>
-      </div>
-      <div class="row">
         <label class="file-btn">TXT 불러오기<input id="fileInput" type="file" accept=".txt" hidden /></label>
         <button id="btnSample">예시 넣기</button>
       </div>
-      <textarea id="codeBox" rows="2" placeholder="직접 입력도 가능 — 한 줄에 하나 (예: 005930 삼성전자)"></textarea>
+      <textarea id="codeBox" rows="2" placeholder="한 줄에 하나 (예: 005930 삼성전자) — 1개면 차트로 점프"></textarea>
       <div class="row"><button id="btnLoadCodes">목록에 추가</button></div>
       <div id="watchlist"></div>
     </div>

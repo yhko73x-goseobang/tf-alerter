@@ -336,15 +336,18 @@
         fs *= k; ss *= k;
       }
       const ty = baseY - volH - 6 * dpr;
+      const bw1 = ctx.measureText(base).width;
+      ctx.font = `bold ${ss}px sans-serif`;
+      const sw1 = suffix ? ctx.measureText(suffix).width : 0;
+      const x0 = Math.max(4 * dpr, (plotW - bw1 - sw1) / 2); // 가로 가운데
       ctx.save();
       ctx.globalAlpha = 0.7; ctx.textAlign = "left";
       ctx.font = `${fs}px sans-serif`; ctx.fillStyle = "#fff";
-      ctx.fillText(base, 8 * dpr, ty);
-      const bw = ctx.measureText(base).width;
+      ctx.fillText(base, x0, ty);
       if (suffix) {
         ctx.font = `bold ${ss}px sans-serif`;
         ctx.fillStyle = TCOL[lh.type] || "#ffb300";
-        ctx.fillText(suffix, 8 * dpr + bw, ty);
+        ctx.fillText(suffix, x0 + bw1, ty);
       }
       ctx.restore();
     })();
