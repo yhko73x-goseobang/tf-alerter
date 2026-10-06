@@ -26,23 +26,16 @@
     return [s];
   }
 
-  // 야후 쿠키 확보 (차단 페이지 회피용, 1회만)
-  let cookieReady = false;
-  async function ensureCookie() {
-    if (cookieReady) return;
-    cookieReady = true;
-    try { await fetch("https://fc.yahoo.com", { mode: "no-cors", credentials: "include" }); } catch (_) {}
-  }
-
+  // 주의: 야후는 ACAO:* 응답이라 credentials:include를 쓰면
+  // 브라우저 CORS 검사에서 전부 차단됨. 쿠키 없이 요청해야 함.
   async function fetchYahooJson(url) {
-    await ensureCookie();
     const direct = [url, url.replace("query1.", "query2.")];
     let err = null, firstErr = null;
     const note = e => { if (!firstErr) firstErr = e; err = e; };
     for (const u of direct) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const r = await fetch(u, { credentials: "include", headers: { Accept: "application/json" } });
+          const r = await fetch(u, { headers: { Accept: "application/json" } });
           const t = await r.text();
           if (!r.ok) { note(new Error("야후 HTTP " + r.status)); break; }
           if (t.charAt(0) === "<") { note(new Error("야후 차단페이지 응답")); break; }
