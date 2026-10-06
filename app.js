@@ -458,9 +458,12 @@
     document.querySelector('[data-page="page-alert"]').click();
   };
   function fire(symId, tfKey, barTime, hit, isLive, price) {
+    const sm = feed.symbols.find(s => s.id === symId);
+    if (sm && sm.alert === false) return; // 감시 해제 종목은 얼럿 안 울림
     const key = `${symId}@${tfKey}@${barTime}@${hit.type}`;
     if (fired.has(key)) return;
     fired.add(key);
+    fires.push({ symId, tfKey, type: hit.type, barTime, wall: Date.now() });
     buyMarks.set(key, { symId, tfKey, barTime, type: hit.type, price });
     if (buyMarks.size > 300) buyMarks.delete(buyMarks.keys().next().value);
     playAlert(hit.type);
@@ -556,44 +559,104 @@
     document.querySelectorAll("#tfBar button").forEach(b => b.classList.toggle("active", b.dataset.tf === tf));
   }
 
-  // ---------- 차트 하단 종목 스트립 (빈칸 없이 꽉 채우기) ----------
-  let stripX = 0, stripMoved = false;
-  const hitMarks = new Map(); // id -> {type, time} — 신호 발생 종목 표시용
-  const lastHits = new Map(); // id -> {type, tfKey} — 종목명 옆 표시용 최신 신호
-  function stripCols(n) {
-    const c = [3, 4, 5, 6];
-    let best = 3, br = 99;
-    for (const k of c) {
-      const r = n % k;
-      if (r === 0) return k;
-      if (r < br) { br = r; best = k; }
-    }
-    return best;
+  // ---------- 차트 하단 신호보드 (종목×시간대, 신호↑·무신호↓, 5초 디바운스) ----------
+  const fires = []; // {symId, tfKey, type, barTime, wall} — 세션 전체 기록
+  const TF_ORDER = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1D"];
+  const TFCOL = { "1m": "#66bb6a", "3m": "#26c6da", "5m": "#ffa726", "15m": "#4db6ac", "30m": "#5c9dff", "1h": "#ffb300", "4h": "#ab47bc", "1D": "#ff7043" };
+  const TFTXT = { "1h": "#231a00", "5m": "#231a00" };
+  function tfWindowMs(t) {
+    const s = (Feed30m.TFS[t] || { sec: 1800 }).sec;
+    if (s <= 3600) return 3600000; // 단기: 직전 1시간
+    if (s <= 14400) return 8 * 3600000; // 4h: 2봉
+    return 48 * 3600000; // 1D: 2봉
   }
+  let boardOrder = [], boardOrderTs = 0;
+  const hitMarks = new Map(); // id -> {type, tfKey, time} — 종목탭 �지용(유지)
+  const lastHits = new Map(); // id -> {type, tfKey} — 종목명 옆 표시용 최신 신호
   function renderStrip() {
     const el = $("symStrip");
+    const now = Date.now();
+    while (fires.length && now - fires[0].wall > 48 * 3600000) fires.shift();
+    if (fires.length > 3000) fires.splice(0, fires.length - 3000);
+    const cntHour = new Map(), cntWin = new Map(), lastMap = new Map();
+    fires.forEach(f => {
+      if (now - f.wall < 3600000) cntHour.set(f.symId, (cntHour.get(f.symId) || 0) + 1);
+      if (now - f.wall < tfWindowMs(f.tfKey)) {
+        const k = f.symId + "|" + f.tfKey;
+        cntWin.set(k, (cntWin.get(k) || 0) + 1);
+      }
+      if (!lastMap.has(f.symId) || lastMap.get(f.symId) < f.wall) lastMap.set(f.symId, f.wall);
+    });
+    const info = feed.symbols.map((s, idx) => ({
+      s, idx,
+      score: cntHour.get(s.id) || 0,
+      last: lastMap.get(s.id) || 0,
+    }));
+    info.sort((a, b) => b.score - a.score || b.last - a.last || a.idx - b.idx);
+    const desired = info.map(r => r.s.id);
+    if (now - boardOrderTs < 5000 && boardOrder.length) {
+      const pos = new Map(boardOrder.map((id, i) => [id, i]));
+      desired.sort((a, b) => (pos.has(a) ? pos.get(a) : 9999) - (pos.has(b) ? pos.get(b) : 9999));
+    } else { boardOrder = desired.slice(); boardOrderTs = now; }
+    const byId = new Map(info.map(r => [r.s.id, r]));
     el.innerHTML = "";
-    el.style.gridTemplateColumns = `repeat(${stripCols(feed.symbols.length)}, 1fr)`;
-    feed.symbols.forEach(s => {
-      const b = document.createElement("button");
-      b.textContent = (s.name && s.name !== s.id) ? `${s.id} ${s.name}` : s.id;
-      b.title = s.id;
-      if (s.id === symbol) b.classList.add("active");
-      const hm = hitMarks.get(s.id);
-      if (hm) { b.classList.add("hit-" + hm.tfKey.toLowerCase()); b.title = `${s.id} · ${hm.type}[${hm.tfKey}] 신호`; }
-      b.onclick = () => jumpToSignal(s.id);
-      el.appendChild(b);
-      if (s.id === symbol) setTimeout(() => b.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }), 50);
+    const hr = document.createElement("div");
+    hr.className = "sb-row sb-head";
+    const h0 = document.createElement("span");
+    h0.textContent = "종목";
+    hr.appendChild(h0);
+    TF_ORDER.forEach(t => {
+      const c = document.createElement("span");
+      c.textContent = t;
+      c.style.color = TFCOL[t];
+      if (t === tf) c.classList.add("cur");
+      hr.appendChild(c);
+    });
+    el.appendChild(hr);
+    boardOrder.forEach(id => {
+      const r = byId.get(id);
+      if (!r) return;
+      const row = document.createElement("div");
+      row.className = "sb-row" + (id === symbol ? " sel" : "");
+      const nm = document.createElement("button");
+      nm.className = "sb-name";
+      nm.innerHTML = `<b>${r.s.id}</b><small>${r.s.name || ""}</small>`;
+      nm.title = r.s.id + " · 1일 차트로 이동";
+      nm.onclick = () => { tf = "1D"; persistSyms(); renderTFBar(); selectSymbol(id); };
+      row.appendChild(nm);
+      TF_ORDER.forEach(t => {
+        const n = cntWin.get(id + "|" + t) || 0;
+        const c = document.createElement("button");
+        c.className = "sb-cell";
+        c.title = `${id} · ${t} 차트로 이동`;
+        c.onclick = () => { tf = t; persistSyms(); renderTFBar(); selectSymbol(id); };
+        if (n > 0) {
+          c.textContent = n > 1 ? n : "○";
+          c.style.background = TFCOL[t];
+          c.style.color = TFTXT[t] || "#fff";
+        }
+        row.appendChild(c);
+      });
+      el.appendChild(row);
     });
   }
-  // 스트립을 밀어서 스크롤했으면 클릭(차트 전환) 무시
-  (function () {
-    const el = $("symStrip");
-    el.addEventListener("touchstart", e => { stripX = e.touches[0].clientX; stripMoved = false; }, { passive: true });
-    el.addEventListener("touchmove", e => { if (Math.abs(e.touches[0].clientX - stripX) > 12) stripMoved = true; }, { passive: true });
-    el.addEventListener("click", e => { if (stripMoved) { e.stopPropagation(); e.preventDefault(); stripMoved = false; } }, true);
-  })();
   const rows = {};
+  const chg = new Map(); // id -> 전일비 %
+  function paintRow(id) {
+    const el = rows[id];
+    if (!el) return;
+    const b = el.querySelector(".pr b"), i = el.querySelector(".pr i");
+    const px = feed.spot[id];
+    if (b && px != null) b.textContent = Number(px).toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+    if (i) {
+      const c = chg.get(id);
+      if (c == null || !isFinite(c)) { i.textContent = ""; }
+      else {
+        i.textContent = (c >= 0 ? "+" : "") + c.toFixed(2) + "%";
+        i.style.color = c >= 0 ? "var(--up)" : "var(--down)";
+      }
+    }
+  }
   function renderWatchlist() {
     const wl = $("watchlist");
     wl.innerHTML = "";
@@ -601,7 +664,15 @@
     feed.symbols.forEach(s => {
       const d = document.createElement("div");
       d.className = "wl" + (s.id === symbol ? " active" : "");
-      d.innerHTML = `<span class="nm">${s.id}<small>${s.name || ""}</small></span><b>—</b>`;
+      d.innerHTML = `<input class="ack" type="checkbox" title="얼럿 감시" /><span class="nm">${s.id}<small>${s.name || ""}</small></span><span class="pr"><b>—</b><i></i></span>`;
+      const ack = d.querySelector(".ack");
+      ack.checked = s.alert !== false;
+      ack.onclick = e => {
+        e.stopPropagation();
+        s.alert = ack.checked;
+        persistSyms();
+        log(`${s.id} 얼럿 ${s.alert ? "켜짐" : "꺼짐"}`);
+      };
       const rm = document.createElement("button");
       rm.className = "rm"; rm.textContent = "✕"; rm.title = "삭제";
       rm.onclick = e => {
@@ -626,11 +697,7 @@
     setTimeout(() => i.remove(), 5 * 60 * 1000);
   }
   feed.onWatch = spot => {
-    for (const id in spot) {
-      const el = rows[id]; if (!el) continue;
-      const b = el.querySelector("b");
-      if (b) b.textContent = Number(spot[id]).toLocaleString("ko-KR", { maximumFractionDigits: 2 });
-    }
+    for (const id in spot) paintRow(id);
   };
   function persistSyms() {
     S_save("symbols", feed.symbols);
@@ -639,7 +706,7 @@
   }
   function restoreSyms() {
     const list = S_load("symbols", null);
-    if (list && list.length) feed.addSymbols(list.map(s => ({ id: s.id, name: s.name })));
+    if (list && list.length) feed.addSymbols(list.map(s => ({ id: s.id, name: s.name, alert: s.alert })));
     else { feed.addSymbols(DEFAULT_SYMS); log(`관심종목 ${DEFAULT_SYMS.length}개 자동 등록`); }
     symbol = S_load("current", "") || (feed.symbols[0] && feed.symbols[0].id) || "";
   }
@@ -677,12 +744,17 @@
     const tfs = watchTFs();
     $("scanInfo").textContent = `스캔중… (${feed.symbols.length}종목 × ${tfs.join(",")})`;
     for (const s of feed.symbols) {
+      if (s.alert === false) continue; // 감시 해제 종목은 스캔 제외
       for (const t of tfs) {
         try {
           // 수동 스캔도 현재 차트만 강제, 나머지는 캐시 존중 (요청 폭증 방지)
           const all = await feed.getBars(s.id, t, manual && s.id === symbol && t === tf);
           const computed = Indicators.computeAll(all, params());
           if (s.id === symbol && t === tf) { bars = all; ind = computed; draw(); updateOHLC(); feed.emitLive(s.id, t); }
+          if (t === "1D" && all.length >= 2) {
+            const prev = all[all.length - 2].close, last = all[all.length - 1].close;
+            if (prev) { chg.set(s.id, (last - prev) / prev * 100); paintRow(s.id); }
+          }
           const i = all.length - 2;
           if (i > 0) Alerter.evalBar(all, computed, i, params()).forEach(h => fire(s.id, t, all[i].time, h, false));
         } catch (e) { if (manual) log(`스캔 실패 ${s.id}/${t}: ${e.message}`); }
@@ -706,6 +778,7 @@
     log(v ? "중계 서버 설정: " + v : "중계 서버 해제 (직접+공개프록시만)");
   }
   $("proxyUrl").addEventListener("change", applyProxy);
+  $("btnGotoSet").onclick = () => { $("symsSettings").scrollIntoView({ behavior: "smooth", block: "start" }); };
   document.querySelectorAll("#tfBar button").forEach(b => {
     b.onclick = () => { tf = b.dataset.tf; persistSyms(); renderTFBar(); updateCurSym(); loadChart(); restartPolling(); };
   });
@@ -729,7 +802,7 @@
   $("btnTestSound").onclick = () => { playAlert("PC"); setTimeout(() => playAlert("BB"), 600); log("테스트음 재생"); };
   $("btnScanNow").onclick = () => scanAll(true);
   $("btnPollNow").onclick = async () => { await loadChart(true); scanAll(true); };
-  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); hitMarks.clear(); lastHits.clear(); buyMarks.clear(); markIdx = null; renderStrip(); draw(); };
+  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); fires.length = 0; boardOrder = []; boardOrderTs = 0; hitMarks.clear(); lastHits.clear(); buyMarks.clear(); markIdx = null; renderStrip(); draw(); };
   document.querySelector('[data-page="page-alert"]').addEventListener("click", () => { $("alertBadge").hidden = true; });
 
   function addCodes(text) {
