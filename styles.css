@@ -28,6 +28,10 @@ canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
 .sym-strip { display:flex; flex-wrap:wrap; gap:6px; overflow-y:auto; max-height:120px; padding:8px 2px 2px; scrollbar-width:thin; }
 .sym-strip button { flex:1 1 30%; min-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:#0b1220; color:var(--txt); border:1px solid var(--grid); border-radius:8px; min-height:40px; padding:6px 8px; font-size:13px; font-weight:700; cursor:pointer; }
 .sym-strip button.active { background:#123a6d; border-color:var(--acc); }
+.sym-strip button.hit-pc { border:2px solid #ffb300; box-shadow:0 0 8px #ffb30088; }
+.sym-strip button.hit-bb { border:2px solid #5c9dff; box-shadow:0 0 8px #5c9dff88; }
+.sym-strip button.hit-ma200 { border:2px solid #ab47bc; box-shadow:0 0 8px #ab47bc88; }
+.sym-strip button.hit-vol { border:2px solid #26a69a; box-shadow:0 0 8px #26a69a88; }
 .toast { position:sticky; top:0; z-index:20; background:#3a2405; border:1px solid #ffb300; border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:14px; cursor:pointer; box-shadow:0 4px 16px #000a; }
 .toast small { display:block; color:var(--mut); font-size:11px; }
 .card { background:var(--card); border:1px solid var(--grid); border-radius:12px; padding:12px; margin-bottom:10px; }
