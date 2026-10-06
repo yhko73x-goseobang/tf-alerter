@@ -6,7 +6,7 @@
   const TF_LABEL = { "1m": "1분", "3m": "3분", "5m": "5분", "15m": "15분", "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
 
   // 첨부 관심종목.txt 기본 탑재 (첫 실행·버전업 시 자동 등록, 중복은 첫 이름 유지)
-  const SYMVER = 3;
+  const SYMVER = 4;
   const DEFAULT_SYMS = [
     { id: "KOSPI", name: "KOSPI" }, { id: "KOSPI200", name: "KOSPI200" }, { id: "KOSDAQ", name: "KOSDAQ" },
     { id: "COMP", name: "나스닥 종합" }, { id: "US100", name: "나스닥100" }, { id: "NDX", name: "나스닥100" }, { id: "IXIC", name: "나스닥종합" },
@@ -37,6 +37,8 @@
     { id: "0238P0", name: "TIGER 미국S&P500미국채혼합50" },
     { id: "373590", name: "TIGER 미국S&P500채권혼합3070" }, { id: "485230", name: "ACE 미국S&P500채권혼합4060" },
     { id: "484120", name: "KODEX 미국나스닥100TR채권혼합4060" }, { id: "483320", name: "SOL 미국배당다우존스채권혼합50" },
+    { id: "0131V0", name: "1Q미국우주항공테크" }, { id: "0181L0", name: "SOL미국우주항공TOP10" },
+    { id: "0207G0", name: "SOL우주항공밸류체인" }, { id: "421320", name: "PLUS우주항공" },
     { id: "BTC/KRW", name: "비트코인" }, { id: "ETH/KRW", name: "이더리움" },
     { id: "SOL/KRW", name: "솔라나" }, { id: "XRP/KRW", name: "엑스알피" },
   ];
