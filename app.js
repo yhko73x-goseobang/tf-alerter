@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const feed = new Feed30m.Feed30m();
   const TFS = Feed30m.TFS;
-  const TF_LABEL = { "15m": "15분", "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
+  const TF_LABEL = { "1m": "1분", "3m": "3분", "5m": "5분", "15m": "15분", "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
 
   // 첨부 관심종목.txt 기본 탑재 (첫 실행 시 자동 등록)
   const DEFAULT_SYMS = [
@@ -115,6 +115,9 @@
   }
   function watchTFs() {
     const out = [];
+    if ($("w1m").checked) out.push("1m");
+    if ($("w3m").checked) out.push("3m");
+    if ($("w5m").checked) out.push("5m");
     if ($("w15m").checked) out.push("15m");
     if ($("w30m").checked) out.push("30m");
     if ($("w1h").checked) out.push("1h");
@@ -134,7 +137,7 @@
     $("cMA200").checked = p.cma !== false; $("cVol").checked = p.cvol === true;
     if (p.scan) $("pScanSec").value = p.scan;
     if (p.poll) $("pollSec").value = p.poll;
-    if (p.w) { $("w15m").checked = p.w.includes("15m"); $("w30m").checked = p.w.includes("30m"); $("w1h").checked = p.w.includes("1h"); $("w4h").checked = p.w.includes("4h"); $("w1D").checked = p.w.includes("1D"); }
+    if (p.w) { $("w1m").checked = p.w.includes("1m"); $("w3m").checked = p.w.includes("3m"); $("w5m").checked = p.w.includes("5m"); $("w15m").checked = p.w.includes("15m"); $("w30m").checked = p.w.includes("30m"); $("w1h").checked = p.w.includes("1h"); $("w4h").checked = p.w.includes("4h"); $("w1D").checked = p.w.includes("1D"); }
   }
 
   // ---------- 차트 (Canvas, 터치 팬/줌) ----------
@@ -322,19 +325,26 @@
       const TN = { PC: "PC하단", BB: "BB하단", MA200: "MA200", VOL: "거래량↑" };
       const TCOL = { PC: "#ffb300", BB: "#5c9dff", MA200: "#ce93d8", VOL: "#4db6ac" };
       const suffix = lh ? ` · ${TN[lh.type] || lh.type}[${lh.tfKey}]` : "";
-      const label = base + suffix;
-      let fs = 13 * dpr;
+      let fs = 13 * dpr, ss = 16 * dpr;
       ctx.font = `${fs}px sans-serif`;
+      const bw0 = ctx.measureText(base).width;
+      ctx.font = `bold ${ss}px sans-serif`;
+      const sw0 = suffix ? ctx.measureText(suffix).width : 0;
       const wmax = plotW - 16 * dpr;
-      const tw = ctx.measureText(label).width;
-      if (tw > wmax) { fs = Math.max(8 * dpr, fs * wmax / tw); ctx.font = `${fs}px sans-serif`; }
+      if (bw0 + sw0 > wmax) {
+        const k = Math.max(8 * dpr / ss, wmax / (bw0 + sw0));
+        fs *= k; ss *= k;
+      }
+      const ty = baseY - volH - 6 * dpr;
       ctx.save();
-      ctx.globalAlpha = 0.7; ctx.fillStyle = "#fff"; ctx.textAlign = "left";
-      ctx.fillText(base, 8 * dpr, baseY - volH - 6 * dpr);
+      ctx.globalAlpha = 0.7; ctx.textAlign = "left";
+      ctx.font = `${fs}px sans-serif`; ctx.fillStyle = "#fff";
+      ctx.fillText(base, 8 * dpr, ty);
+      const bw = ctx.measureText(base).width;
       if (suffix) {
-        const bw = ctx.measureText(base).width;
+        ctx.font = `bold ${ss}px sans-serif`;
         ctx.fillStyle = TCOL[lh.type] || "#ffb300";
-        ctx.fillText(suffix, 8 * dpr + bw, baseY - volH - 6 * dpr);
+        ctx.fillText(suffix, 8 * dpr + bw, ty);
       }
       ctx.restore();
     })();
@@ -494,6 +504,15 @@
     updateCurSym(); renderWatchlist();
     await loadChart();
   }
+  // 신호 온 종목은 신호 난 시간대 차트로 점프
+  function jumpToSignal(id) {
+    const lh = lastHits.get(id);
+    if (lh && TFS[lh.tfKey] && lh.tfKey !== tf) {
+      tf = lh.tfKey; persistSyms(); renderTFBar();
+      log(`${id} 신호 시간대(${(TF_LABEL[tf] || tf)})로 이동`);
+    }
+    selectSymbol(id);
+  }
   function setStatus(msg) {
     $("yahooStatus").textContent = msg;
     $("feedInfo").textContent = `${tf} · ${symbol || "-"} · ${msg}`;
@@ -562,7 +581,7 @@
       if (s.id === symbol) b.classList.add("active");
       const hm = hitMarks.get(s.id);
       if (hm) { b.classList.add("hit-" + hm.tfKey.toLowerCase()); b.title = `${s.id} · ${hm.type}[${hm.tfKey}] 신호`; }
-      b.onclick = () => selectSymbol(s.id);
+      b.onclick = () => jumpToSignal(s.id);
       el.appendChild(b);
       if (s.id === symbol) setTimeout(() => b.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }), 50);
     });
@@ -593,7 +612,7 @@
         else { renderWatchlist(); persistSyms(); }
       };
       d.appendChild(rm);
-      d.onclick = () => selectSymbol(s.id);
+      d.onclick = () => jumpToSignal(s.id);
       wl.appendChild(d); rows[s.id] = d;
     });
     renderStrip();
@@ -700,7 +719,7 @@
     try { localStorage.setItem("a30_indopen", bar.classList.contains("collapsed") ? "0" : "1"); } catch (_) {}
   };
   $("btnFollow").onclick = () => { follow = true; offset = 0; $("btnFollow").classList.add("active"); draw(); };
-  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
+  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "w1m", "w3m", "w5m", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
     $(id).onchange = () => {
       persistParams(); restartScanTimer(); restartPolling();
       if (bars.length) { ind = Indicators.computeAll(bars, params()); checkBars(symbol, tf, bars, false); draw(); }

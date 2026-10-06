@@ -33,6 +33,9 @@
       </div>
     </div>
     <div class="tfbar" id="tfBar">
+      <button data-tf="1m">1분</button>
+      <button data-tf="3m">3분</button>
+      <button data-tf="5m">5분</button>
       <button data-tf="15m">15분</button>
       <button data-tf="30m" class="active">30분</button>
       <button data-tf="1h">1시간</button>
@@ -61,6 +64,9 @@
     <div class="card">
       <h3>🔔 조건 (ON/OFF) + 감시 시간대</h3>
       <div class="row" id="tfWatch">
+        <label class="switch"><input type="checkbox" id="w1m" /> 1분</label>
+        <label class="switch"><input type="checkbox" id="w3m" /> 3분</label>
+        <label class="switch"><input type="checkbox" id="w5m" /> 5분</label>
         <label class="switch"><input type="checkbox" id="w15m" checked /> 15분</label>
         <label class="switch"><input type="checkbox" id="w30m" checked /> 30분</label>
         <label class="switch"><input type="checkbox" id="w1h" checked /> 1시간</label>

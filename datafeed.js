@@ -4,6 +4,9 @@
  */
 (function (global) {
   const TFS = {
+    "1m": { sec: 60, interval: "1m", range: "5d", minAge: 60 * 1000 },
+    "3m": { sec: 180, interval: "1m", range: "5d", resample: 180, minAge: 60 * 1000 },
+    "5m": { sec: 300, interval: "5m", range: "1mo", minAge: 60 * 1000 },
     "15m": { sec: 900, interval: "15m", range: "1mo", minAge: 2 * 60 * 1000 },
     "30m": { sec: 1800, interval: "30m", range: "1mo", minAge: 3 * 60 * 1000 },
     "1h": { sec: 3600, interval: "60m", range: "3mo", minAge: 10 * 60 * 1000 },
