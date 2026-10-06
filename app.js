@@ -850,7 +850,7 @@
     try { localStorage.setItem("a30_indopen", bar.classList.contains("collapsed") ? "0" : "1"); } catch (_) {}
   };
   $("btnFollow").onclick = () => { follow = true; offset = 0; $("btnFollow").classList.add("active"); draw(); };
-  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "w1m", "w3m", "w5m", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
+  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "pSnd", "w1m", "w3m", "w5m", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
     $(id).onchange = () => {
       persistParams(); restartScanTimer(); restartPolling();
       if (bars.length) { ind = Indicators.computeAll(bars, params()); checkBars(symbol, tf, bars, false); draw(); }
