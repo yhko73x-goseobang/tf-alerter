@@ -463,7 +463,7 @@
   }
   function restartPolling() {
     feed.pollSec = Math.max(15, +$("pollSec").value || 20);
-    feed.startPolling(tf, () => { if (symbol) { checkBars(symbol, tf, bars, true); draw(); updateOHLC(); } });
+    feed.startPolling(tf, () => symbol, () => { if (symbol) { checkBars(symbol, tf, bars, true); draw(); updateOHLC(); } });
   }
 
   // ---------- 시작 ----------

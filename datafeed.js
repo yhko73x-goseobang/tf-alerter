@@ -4,10 +4,10 @@
  */
 (function (global) {
   const TFS = {
-    "30m": { sec: 1800, interval: "30m", range: "3mo", minAge: 60 * 1000 },
-    "1h": { sec: 3600, interval: "60m", range: "6mo", minAge: 5 * 60 * 1000 },
-    "4h": { sec: 14400, interval: "60m", range: "6mo", resample: 14400, minAge: 15 * 60 * 1000 },
-    "1D": { sec: 86400, interval: "1d", range: "2y", minAge: 60 * 60 * 1000 },
+    "30m": { sec: 1800, interval: "30m", range: "1mo", minAge: 3 * 60 * 1000 },
+    "1h": { sec: 3600, interval: "60m", range: "3mo", minAge: 10 * 60 * 1000 },
+    "4h": { sec: 14400, interval: "60m", range: "3mo", resample: 14400, minAge: 30 * 60 * 1000 },
+    "1D": { sec: 86400, interval: "1d", range: "2y", minAge: 2 * 60 * 60 * 1000 },
   };
   const IDX = { KOSPI: "^KS11", KOSPI200: "^KS200", KOSDAQ: "^KQ11", US100: "^NDX", IXIC: "^IXIC" };
 
@@ -37,15 +37,21 @@
   async function fetchYahooJson(url) {
     await ensureCookie();
     const direct = [url, url.replace("query1.", "query2.")];
-    let err = null;
+    let err = null, firstErr = null;
+    const note = e => { if (!firstErr) firstErr = e; err = e; };
     for (const u of direct) {
-      try {
-        const r = await fetch(u, { credentials: "include", headers: { Accept: "application/json" } });
-        const t = await r.text();
-        if (!r.ok) { err = new Error("야후 HTTP " + r.status); continue; }
-        if (t.charAt(0) === "<") { err = new Error("야후 차단페이지 응답"); continue; }
-        return JSON.parse(t);
-      } catch (e) { err = e; }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await fetch(u, { credentials: "include", headers: { Accept: "application/json" } });
+          const t = await r.text();
+          if (!r.ok) { note(new Error("야후 HTTP " + r.status)); break; }
+          if (t.charAt(0) === "<") { note(new Error("야후 차단페이지 응답")); break; }
+          return JSON.parse(t);
+        } catch (e) {
+          note(e);
+          if (attempt === 0) await new Promise(res => setTimeout(res, 800));
+        }
+      }
     }
     // 공개 프록시 경유 (서버 없이 폰에서 직접)
     try {
@@ -59,7 +65,7 @@
       const r = await fetch("/yahoo-api?url=" + encodeURIComponent(url));
       if (r.ok) return await r.json();
     } catch (_) {}
-    throw err || new Error("야후 조회 실패");
+    throw firstErr || err || new Error("야후 조회 실패");
   }
 
   function resample(bars, sec) {
@@ -102,7 +108,7 @@
     const tf = TFS[tfKey] || TFS["30m"];
     const isCrypto = /^(BTC|ETH|SOL|XRP)[\/\-]?(KRW|USD)?$/i.test(String(symbol).trim());
     const range = isCrypto && tf.sec < 86400 ? "1mo" : tf.range;
-    let lastErr = null;
+    let lastErr = null, firstErr = null;
     for (const yh of candidates(symbol)) {
       try {
         const j = await fetchYahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yh)}?interval=${tf.interval}&range=${range}`);
@@ -114,9 +120,9 @@
           return bars.slice(-400);
         }
         lastErr = new Error(yh + "/" + tfKey + ": 봉 부족");
-      } catch (e) { lastErr = e; }
+      } catch (e) { if (!firstErr) firstErr = e; lastErr = e; }
     }
-    throw lastErr || new Error(symbol + "/" + tfKey + ": 데이터 없음");
+    throw firstErr || lastErr || new Error(symbol + "/" + tfKey + ": 데이터 없음");
   }
 
   class Feed {
@@ -180,14 +186,13 @@
         { symbol, price: last.close, time: last.time * 1000, volume: 0 }, bars));
       this.onWatch && this.onWatch({ ...this.spot });
     }
-    startPolling(mainTf, onCycle) {
+    startPolling(mainTf, symbolFn, onCycle) {
       this.stopPolling();
       this._timer = setInterval(async () => {
-        for (const s of this.symbols) {
-          try { await this.getBars(s.id, mainTf); this.emitLive(s.id, mainTf); }
-          catch (e) { this.log(`수신 실패 ${s.id}/${mainTf}: ${e.message}`); }
-          await new Promise(r => setTimeout(r, 300));
-        }
+        const sym = typeof symbolFn === "function" ? symbolFn() : symbolFn;
+        if (!sym) return;
+        try { await this.getBars(sym, mainTf); this.emitLive(sym, mainTf); }
+        catch (e) { this.log(`수신 실패 ${sym}/${mainTf}: ${e.message}`); }
         onCycle && onCycle();
       }, Math.max(15, this.pollSec) * 1000);
     }
