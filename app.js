@@ -582,7 +582,7 @@
   }
 
   // ---------- 중계 서버 URL ----------
-  try { $("proxyUrl").value = localStorage.getItem("a30_proxy") || ""; } catch (_) {}
+  try { $("proxyUrl").value = localStorage.getItem("a30_proxy") || "https://tf-relay.yhko73x.workers.dev"; } catch (_) { $("proxyUrl").value = "https://tf-relay.yhko73x.workers.dev"; }
   function applyProxy() {
     const v = $("proxyUrl").value.trim().replace(/\/+$/, "");
     try { localStorage.setItem("a30_proxy", v); } catch (_) {}

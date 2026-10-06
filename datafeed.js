@@ -31,10 +31,14 @@
   // 브라우저 CORS 검사에서 전부 차단됨. 쿠키 없이 요청해야 함.
   // 요청 제한 차단기: 네트워크 실패 연속 6회면 90초 휴식
   let netFail = 0, coolUntil = 0;
-  // 자체 중계 서버 (Cloudflare Worker, 앱 설정에서 입력. 없으면 건너뜀)
+  // 자체 중계 서버 (Cloudflare Worker. 미입력 시 기본값 사용, 지우면 직접+공개프록시만)
+  const DEFAULT_RELAY = "https://tf-relay.yhko73x.workers.dev";
   function relay() {
-    try { return (Feed.proxyUrl || localStorage.getItem("a30_proxy") || "").replace(/\/+$/, ""); }
-    catch (_) { return Feed.proxyUrl || ""; }
+    try {
+      const v = localStorage.getItem("a30_proxy");
+      return ((v == null ? DEFAULT_RELAY : v) || "").replace(/\/+$/, "");
+    }
+    catch (_) { return Feed.proxyUrl || DEFAULT_RELAY; }
   }
   async function fetchDirectJson(url) {
     if (Date.now() < coolUntil) throw new Error("야후 요청 제한 중 — 잠시 후 자동 재개");
