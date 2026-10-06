@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0d1421" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="manifest" href="manifest.webmanifest" />
+<title>멀티TF 알리미 — 30m·1h·4h·1D 조건 달성</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="appbar">
+  <div class="appbar-top">
+    <strong>⏰ 멀티TF 알리미</strong>
+    <span class="badge-30m">30m·1h·4h·1D</span>
+    <span class="conn"><span id="connDot" class="dot sim"></span><span id="connText">시뮬</span></span>
+  </div>
+  <div class="cur-sym" id="curSym">—</div>
+</header>
+
+<main class="pages">
+  <!-- 차트 페이지 -->
+  <section class="page active" id="page-chart">
+    <div class="tfbar" id="tfBar">
+      <button data-tf="30m" class="active">30분</button>
+      <button data-tf="1h">1시간</button>
+      <button data-tf="4h">4시간</button>
+      <button data-tf="1D">1일</button>
+    </div>
+    <div class="ohlc" id="ohlc">—</div>
+    <div class="canvas-wrap" id="chartWrap">
+      <canvas id="chart"></canvas>
+      <div class="alert-flash" id="alertFlash" hidden></div>
+    </div>
+    <div class="ind-toggles">
+      <label><input type="checkbox" id="tglMA" checked /> MA</label>
+      <label><input type="checkbox" id="tglBB" checked /> BB</label>
+      <label><input type="checkbox" id="tglPC" checked /> PC</label>
+      <label><input type="checkbox" id="tglVol" checked /> 거래량</label>
+      <button id="btnFollow" class="active">▶ 추적</button>
+    </div>
+    <div class="statusline"><span id="feedInfo">30m · 대기</span><span id="priceInfo">—</span></div>
+  </section>
+
+  <!-- 알리미 페이지 -->
+  <section class="page" id="page-alert">
+    <div class="card">
+      <h3>🔔 조건 (ON/OFF) + 감시 시간대</h3>
+      <div class="row" id="tfWatch">
+        <label class="switch"><input type="checkbox" id="w30m" checked /> 30분</label>
+        <label class="switch"><input type="checkbox" id="w1h" checked /> 1시간</label>
+        <label class="switch"><input type="checkbox" id="w4h" checked /> 4시간</label>
+        <label class="switch"><input type="checkbox" id="w1D" checked /> 1일</label>
+      </div>
+      <label class="cond"><input type="checkbox" id="cPC" checked /><span><b>PC 하단 터치</b><small>저가 ≤ 돈치안 하단</small></span></label>
+      <label class="cond"><input type="checkbox" id="cBB" checked /><span><b>BB 하단 터치</b><small>저가 ≤ 볼린저 하단</small></span></label>
+      <label class="cond"><input type="checkbox" id="cMA200" checked /><span><b>MA200 터치</b><small>봉 안에 MA200 포함</small></span></label>
+      <label class="cond"><input type="checkbox" id="cVol" /><span><b>거래량 급증</b><small>당봉 ≥ 평균×배수</small></span></label>
+    </div>
+    <div class="card">
+      <h3>⚙️ 지표 파라미터 (전 시간대 공통)</h3>
+      <div class="grid2">
+        <label>PC 기간<input id="pPCLen" type="number" value="20" min="5" max="200" /></label>
+        <label>BB 기간<input id="pBBN" type="number" value="20" min="5" max="200" /></label>
+        <label>BB σ<input id="pBBK" type="number" value="2" min="1" max="3" step="0.5" /></label>
+        <label>MA<input id="pMA" type="text" value="20,60,100,200" /></label>
+        <label>거래량 평균<input id="pVolN" type="number" value="20" min="5" max="120" /></label>
+        <label>거래량 배수<input id="pVolK" type="number" value="2" min="1" max="10" step="0.5" /></label>
+      </div>
+      <div class="row">
+        <label>스캔 주기
+          <select id="pScanSec">
+            <option value="15">15초</option>
+            <option value="30" selected>30초</option>
+            <option value="60">60초</option>
+          </select>
+        </label>
+        <label class="switch"><input type="checkbox" id="pVibrate" checked /> 진동</label>
+        <label class="switch"><input type="checkbox" id="pNotify" checked /> 알림</label>
+        <label class="switch"><input type="checkbox" id="pWake" checked /> 화면유지</label>
+      </div>
+      <div class="row">
+        <button id="btnTestSound">🔊 테스트음</button>
+        <button id="btnScanNow">🔍 지금 스캔</button>
+        <button id="btnClearAlerts">기록지우기</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>📝 달성 기록 <span class="mut" id="scanInfo">대기</span></h3>
+      <div class="alert-log" id="alertLog"></div>
+    </div>
+  </section>
+
+  <!-- 종목 페이지 -->
+  <section class="page" id="page-syms">
+    <div class="card">
+      <h3>📡 야후 30분봉 피드 (키/PC 불필요)</h3>
+      <div class="kw-status" id="yahooStatus">대기 — 종목 추가 후 스캔 시작</div>
+      <div class="row">
+        <label>폴링 간격
+          <select id="pollSec">
+            <option value="15">15초</option>
+            <option value="20" selected>20초 (기본)</option>
+            <option value="30">30초</option>
+            <option value="60">60초</option>
+          </select>
+        </label>
+        <button id="btnPollNow">🔄 지금 받기</button>
+      </div>
+      <p class="hint">6자리 번호는 <code>.KS → .KQ</code> 자동 판별. 차트 시간대 전환해도 감시는 체크된 시간대 전부 돎. 4h는 60m봉 합성, 1D는 일봉. 지연 있어도 완성봉 기준이라 상관없음.</p>
+    </div>
+    <div class="card">
+      <h3>📋 종목 (터치 → 차트)</h3>
+      <div class="row">
+        <input id="quickCode" type="text" placeholder="종목번호 (예: 005930)" maxlength="30" />
+        <button id="btnQuickAdd">추가</button>
+      </div>
+      <div class="row">
+        <label class="file-btn">TXT 불러오기<input id="fileInput" type="file" accept=".txt" hidden /></label>
+        <button id="btnSample">예시 넣기</button>
+      </div>
+      <textarea id="codeBox" rows="2" placeholder="직접 입력도 가능 — 한 줄에 하나 (예: 005930 삼성전자)"></textarea>
+      <div class="row"><button id="btnLoadCodes">목록에 추가</button></div>
+      <div id="watchlist"></div>
+    </div>
+    <div class="card"><h3>📜 로그</h3><div class="log" id="log"></div></div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button data-page="page-chart" class="active">📈<small>차트</small></button>
+  <button data-page="page-alert">🔔<small>알리미</small><i id="alertBadge" hidden></i></button>
+  <button data-page="page-syms">📋<small>종목</small></button>
+</nav>
+
+<audio id="alertAudio" src="../alert.wav" preload="auto"></audio>
+<script src="indicators.js"></script>
+<script src="datafeed.js"></script>
+<script src="alerter.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

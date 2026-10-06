@@ -1,0 +1,478 @@
+/* app.js — 야후 멀티시간대(30m/1h/4h/1D) 알리미 (키/PC 불필요) */
+(function () {
+  const $ = id => document.getElementById(id);
+  const feed = new Feed30m.Feed30m();
+  const TFS = Feed30m.TFS;
+  const TF_LABEL = { "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
+
+  // 첨부 관심종목.txt 기본 탑재 (첫 실행 시 자동 등록)
+  const DEFAULT_SYMS = [
+    { id: "KOSPI", name: "KOSPI" }, { id: "KOSPI200", name: "KOSPI200" }, { id: "KOSDAQ", name: "KOSDAQ" },
+    { id: "US100", name: "US100 나스닥100" }, { id: "IXIC", name: "IXIC 나스닥종합" },
+    { id: "102110", name: "TIGER200" }, { id: "069500", name: "코덱스200" }, { id: "148020", name: "RISE200" },
+    { id: "395270", name: "HANARO Fn-K반도체" }, { id: "396500", name: "TIGER반도체TOP10" },
+    { id: "476260", name: "HANARO 반도체핵심공정주도주" }, { id: "471990", name: "KODEX AI반도체핵심장비" },
+    { id: "471760", name: "TIGER AI 반도체핵심공정" }, { id: "482030", name: "KoAct 반도체&2차전지핵심소재액티브" },
+    { id: "232080", name: "TIGER 코스닥150" }, { id: "261060", name: "TIGER 코스닥150IT" },
+    { id: "123310", name: "TIGER 타이거인버스" }, { id: "114800", name: "KODEX 인버스" },
+    { id: "337140", name: "KODEX 대형주" }, { id: "277640", name: "TIGER 대형주" },
+    { id: "448300", name: "나스닥100(H)" }, { id: "449190", name: "나스닥100(H)" }, { id: "453080", name: "나스닥100(H)" },
+    { id: "448290", name: "S&P500(H)" }, { id: "449180", name: "S&P500(H)" },
+    { id: "466920", name: "솔 조선" }, { id: "228790", name: "TIGER 화장품" }, { id: "449450", name: "한화 플러스 방산" },
+    { id: "161510", name: "PLUS 고배당" }, { id: "004380", name: "TIGER 머니마켓액티브" }, { id: "458730", name: "TIGER 미국배당다우존스" },
+    { id: "BTC/KRW", name: "BTC/KRW" }, { id: "ETH/KRW", name: "ETH/KRW" },
+    { id: "SOL/KRW", name: "SOL/KRW" }, { id: "XRP/KRW", name: "XRP/KRW" },
+  ];
+
+  // ---------- 상태 ----------
+  let symbol = "";
+  let tf = S_load("tf", "30m");
+  if (!TFS[tf]) tf = "30m";
+  let bars = [];
+  let ind = null;
+  let unsub = null;
+  let follow = true, perRow = 9, offset = 0;
+  const fired = new Set(); // symbol@tf@barTime@type
+  function S_load(k, d) { try { const v = localStorage.getItem("a30_" + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } }
+  function S_save(k, v) { try { localStorage.setItem("a30_" + k, JSON.stringify(v)); } catch (_) {} }
+
+  // ---------- 로그 ----------
+  function log(m) {
+    const el = $("log"), d = document.createElement("div");
+    d.textContent = `${new Date().toLocaleTimeString()} ${m}`;
+    el.prepend(d);
+    while (el.children.length > 80) el.lastChild.remove();
+  }
+  feed.onLog = log;
+  window.addEventListener("error", e => log("JS오류: " + (e.message || e)));
+
+  // ---------- 탭 ----------
+  document.querySelectorAll(".tabbar button").forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll(".tabbar button").forEach(x => x.classList.toggle("active", x === b));
+      document.querySelectorAll(".page").forEach(p => p.classList.toggle("active", p.id === b.dataset.page));
+      if (b.dataset.page === "page-chart") draw();
+    };
+  });
+
+  // ---------- 사운드/진동/알림 ----------
+  let actx = null;
+  function beep(f, dur, delay) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === "suspended") actx.resume();
+      const t = actx.currentTime + (delay || 0);
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.5, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(actx.destination);
+      o.start(t); o.stop(t + dur + 0.05);
+    } catch (_) {}
+  }
+  function playAlert(type) {
+    const a = $("alertAudio");
+    try {
+      if (a && a.src && a.src.indexOf("alert.wav") >= 0) { a.currentTime = 0; a.play().catch(() => beepFallback()); }
+      else beepFallback();
+    } catch (_) { beepFallback(); }
+    function beepFallback() {
+      if (type === "PC") { beep(660, 0.2, 0); beep(880, 0.25, 0.22); }
+      else if (type === "BB") { beep(520, 0.2, 0); beep(780, 0.25, 0.22); }
+      else { beep(440, 0.2, 0); beep(660, 0.2, 0.2); beep(880, 0.3, 0.4); }
+    }
+    if ($("pVibrate").checked && navigator.vibrate) { try { navigator.vibrate([200, 100, 200]); } catch (_) {} }
+  }
+  async function notify(title, body) {
+    if (!$("pNotify").checked) return;
+    try {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "default") await Notification.requestPermission();
+      if (Notification.permission === "granted") new Notification(title, { body });
+    } catch (_) {}
+  }
+  let wakeLock = null;
+  async function keepAwake() {
+    if (!$("pWake").checked) { try { wakeLock && wakeLock.release(); } catch (_) {} wakeLock = null; return; }
+    try { wakeLock = await navigator.wakeLock.request("screen"); } catch (_) {}
+  }
+
+  // ---------- 파라미터 ----------
+  function params() {
+    const maLengths = $("pMA").value.split(",").map(s => parseInt(s.trim(), 10)).filter(n => n >= 2 && n <= 400);
+    return {
+      pcLen: Math.max(5, Math.min(200, +$("pPCLen").value || 20)),
+      bbN: Math.max(5, Math.min(200, +$("pBBN").value || 20)),
+      bbK: Math.max(1, Math.min(3, +$("pBBK").value || 2)),
+      maLengths: maLengths.length ? maLengths : [20, 60, 100, 200],
+      volN: Math.max(5, Math.min(120, +$("pVolN").value || 20)),
+      volK: Math.max(1, Math.min(10, +$("pVolK").value || 2)),
+      enabled: { PC: $("cPC").checked, BB: $("cBB").checked, MA200: $("cMA200").checked, VOL: $("cVol").checked },
+    };
+  }
+  function watchTFs() {
+    const out = [];
+    if ($("w30m").checked) out.push("30m");
+    if ($("w1h").checked) out.push("1h");
+    if ($("w4h").checked) out.push("4h");
+    if ($("w1D").checked) out.push("1D");
+    return out.length ? out : ["30m"];
+  }
+  function persistParams() {
+    S_save("params", { pc: $("pPCLen").value, bbn: $("pBBN").value, bbk: $("pBBK").value, ma: $("pMA").value, voln: $("pVolN").value, volk: $("pVolK").value, cpc: $("cPC").checked, cbb: $("cBB").checked, cma: $("cMA200").checked, cvol: $("cVol").checked, scan: $("pScanSec").value, poll: $("pollSec").value, w: watchTFs() });
+  }
+  function restoreParams() {
+    const p = S_load("params", null);
+    if (!p) return;
+    $("pPCLen").value = p.pc || 20; $("pBBN").value = p.bbn || 20; $("pBBK").value = p.bbk || 2;
+    $("pMA").value = p.ma || "20,60,100,200"; $("pVolN").value = p.voln || 20; $("pVolK").value = p.volk || 2;
+    $("cPC").checked = p.cpc !== false; $("cBB").checked = p.cbb !== false;
+    $("cMA200").checked = p.cma !== false; $("cVol").checked = p.cvol === true;
+    if (p.scan) $("pScanSec").value = p.scan;
+    if (p.poll) $("pollSec").value = p.poll;
+    if (p.w) { $("w30m").checked = p.w.includes("30m"); $("w1h").checked = p.w.includes("1h"); $("w4h").checked = p.w.includes("4h"); $("w1D").checked = p.w.includes("1D"); }
+  }
+
+  // ---------- 차트 (Canvas, 터치 팬/줌) ----------
+  const cv = $("chart"), ctx = cv.getContext("2d");
+  let dpr = 1;
+  function resize() {
+    const r = $("chartWrap").getBoundingClientRect();
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.max(1, Math.round(r.width * dpr));
+    cv.height = Math.max(1, Math.round(r.height * dpr));
+    draw();
+  }
+  new ResizeObserver(resize).observe($("chartWrap"));
+  window.addEventListener("resize", resize);
+
+  let dragX = null, dragOff = 0, pinchD = 0, pinchPR = 0;
+  cv.addEventListener("pointerdown", e => { dragX = e.clientX; dragOff = offset; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", e => {
+    if (dragX == null) return;
+    offset = Math.max(0, Math.round(dragOff + (dragX - e.clientX) / perRow));
+    follow = false; $("btnFollow").classList.remove("active");
+    draw();
+  });
+  cv.addEventListener("pointerup", () => { dragX = null; });
+  cv.addEventListener("wheel", e => { e.preventDefault(); perRow = Math.min(40, Math.max(4, perRow * (e.deltaY > 0 ? 1.1 : 0.9))); draw(); }, { passive: false });
+  cv.addEventListener("touchmove", e => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      if (pinchD) perRow = Math.min(40, Math.max(4, pinchPR * pinchD / d));
+      else { pinchD = d; pinchPR = perRow; }
+      draw();
+    }
+  }, { passive: false });
+  cv.addEventListener("touchend", () => { pinchD = 0; });
+
+  const MA_COLORS = ["#ffeb3b", "#ff9800", "#ab47bc", "#42a5f5"];
+  function draw() {
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    if (!bars.length) {
+      ctx.fillStyle = "#7d8aa3"; ctx.font = `${13 * dpr}px sans-serif`;
+      ctx.fillText("종목을 선택하세요 (야후 " + tf + ")", 16 * dpr, 30 * dpr);
+      return;
+    }
+    const n = Math.min(bars.length, Math.floor(W / dpr / perRow) + 5);
+    const end = bars.length - offset;
+    const view = bars.slice(Math.max(0, end - n), Math.max(0, end));
+    if (!view.length) return;
+    let hi = -Infinity, lo = Infinity, vmax = 1;
+    view.forEach(b => { hi = Math.max(hi, b.high); lo = Math.min(lo, b.low); vmax = Math.max(vmax, b.volume); });
+    const pad = (hi - lo) * 0.08 || 1; hi += pad; lo -= pad;
+    const volH = H * 0.16, priceH = H - volH - 8 * dpr;
+    const y = p => priceH - (p - lo) / (hi - lo) * priceH;
+    const stepX = W / view.length;
+    const p = params();
+
+    ctx.strokeStyle = "#1e2a44"; ctx.lineWidth = 1;
+    for (let g = 0; g < 4; g++) { const gy = priceH * (g + 1) / 5; ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+
+    view.forEach((b, i) => {
+      const x = (i + 0.5) * stepX;
+      const up = b.close >= b.open;
+      ctx.strokeStyle = ctx.fillStyle = up ? "#26a69a" : "#ef5350";
+      const bw = Math.max(2, stepX * 0.6);
+      ctx.beginPath(); ctx.moveTo(x, y(b.high)); ctx.lineTo(x, y(b.low)); ctx.stroke();
+      const yO = y(b.open), yC = y(b.close);
+      ctx.fillRect(x - bw / 2, Math.min(yO, yC), bw, Math.max(1, Math.abs(yC - yO)));
+      if ($("tglVol").checked) {
+        const vh = (b.volume / vmax) * volH;
+        ctx.globalAlpha = 0.55;
+        ctx.fillRect(x - bw / 2, H - vh, bw, vh);
+        ctx.globalAlpha = 1;
+      }
+    });
+
+    const gi = end - view.length;
+    function line(arr, color, dash) {
+      ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, 1.2 * dpr); ctx.setLineDash(dash || []);
+      ctx.beginPath(); let started = false;
+      view.forEach((_, i) => {
+        const v = arr[gi + i];
+        if (v == null) { started = false; return; }
+        const x = (i + 0.5) * stepX, yy = y(v);
+        if (!started) { ctx.moveTo(x, yy); started = true; } else ctx.lineTo(x, yy);
+      });
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    if (ind) {
+      if ($("tglMA").checked) p.maLengths.forEach((len, k) => line(ind.mas[len] || [], MA_COLORS[k % MA_COLORS.length]));
+      if ($("tglBB").checked) { line(ind.bb.up, "#5c9dff"); line(ind.bb.dn, "#5c9dff"); }
+      if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", [5 * dpr, 4 * dpr]); line(ind.pc.dn, "#ffb300", [5 * dpr, 4 * dpr]); }
+    }
+    const last = bars[bars.length - 1];
+    ctx.strokeStyle = last.close >= last.open ? "#26a69a" : "#ef5350";
+    ctx.setLineDash([4 * dpr, 3 * dpr]);
+    ctx.beginPath(); ctx.moveTo(0, y(last.close)); ctx.lineTo(W, y(last.close)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#d5dce8"; ctx.font = `${11 * dpr}px sans-serif`;
+    ctx.fillText(fmtT(last.time) + " " + tf + " · 야후", 8 * dpr, 14 * dpr);
+  }
+  function fmtT(t) {
+    const d = new Date(t * 1000);
+    if (tf === "1D") return `${d.getMonth() + 1}/${d.getDate()}`;
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+
+  // ---------- 알림 기록/발동 ----------
+  function alertLog(msg, kind) {
+    const el = $("alertLog"), d = document.createElement("div");
+    d.className = "alert-item " + (kind || "");
+    d.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
+    el.prepend(d);
+    while (el.children.length > 60) el.lastChild.remove();
+    const badge = $("alertBadge");
+    badge.hidden = false;
+    badge.textContent = Math.min(99, el.children.length);
+  }
+  function fire(symId, tfKey, barTime, hit, isLive) {
+    const key = `${symId}@${tfKey}@${barTime}@${hit.type}`;
+    if (fired.has(key)) return;
+    fired.add(key);
+    playAlert(hit.type);
+    notify(`[${tfKey}] ${symId} ${hit.type}`, hit.label);
+    alertLog(`[${tfKey}] ${symId} · ${hit.label}${isLive ? " (진행봉)" : " (완성봉)"}`, hit.type);
+    renderWatchlistBadge(symId);
+    if (symId === symbol && tfKey === tf) {
+      const f = $("alertFlash");
+      f.hidden = false;
+      clearTimeout(f._t);
+      f._t = setTimeout(() => (f.hidden = true), 1800);
+    }
+  }
+  function checkBars(symId, tfKey, allBars, live) {
+    const p = params();
+    const computed = Indicators.computeAll(allBars, p);
+    if (symId === symbol && tfKey === tf) ind = computed;
+    const i = allBars.length - (live ? 1 : 2);
+    if (i < 1) return;
+    Alerter.evalBar(allBars, computed, i, p).forEach(h => fire(symId, tfKey, allBars[i].time, h, live));
+  }
+
+  // ---------- 종목/차트 로드 ----------
+  function parseCodeText(text) {
+    return String(text || "").split(/[\n,;]+/).map(s => s.trim()).filter(Boolean).map(line => {
+      if (/^#/.test(line)) return null;
+      const m = line.match(/(\d{6}|[A-Z.\-^]{1,12}|BTC\/KRW|ETH\/KRW|SOL\/KRW|XRP\/KRW)/i);
+      if (!m) return null;
+      const id = m[1].toUpperCase();
+      const name = line.replace(m[1], "").trim();
+      return { id, name: name || id };
+    }).filter(Boolean);
+  }
+  async function selectSymbol(id) {
+    symbol = id;
+    persistSyms();
+    updateCurSym(); renderWatchlist();
+    await loadChart();
+  }
+  function setStatus(msg) {
+    $("yahooStatus").textContent = msg;
+    $("feedInfo").textContent = `${tf} · ${symbol || "-"} · ${msg}`;
+  }
+  async function loadChart(force) {
+    if (!symbol) { bars = []; ind = null; draw(); return; }
+    if (unsub) { unsub(); unsub = null; }
+    setStatus(`${symbol} 받는 중…`);
+    try {
+      bars = await feed.getBars(symbol, tf, force);
+    } catch (e) {
+      setStatus("실패: " + e.message);
+      log(`수신 실패(${symbol}/${tf}): ${e.message}`);
+      return;
+    }
+    ind = Indicators.computeAll(bars, params());
+    checkBars(symbol, tf, bars, false);
+    offset = 0;
+    draw(); updateOHLC();
+    unsub = feed.subscribe(symbol, tf, () => {
+      checkBars(symbol, tf, bars, true);
+      ind = Indicators.computeAll(bars, params());
+      if (follow) offset = 0;
+      draw(); updateOHLC();
+    });
+    const last = bars[bars.length - 1];
+    setStatus(`야후 ${tf} ${bars.length}봉 · ${fmtT(last.time)} 마감`);
+    if (last) $("priceInfo").textContent = Alerter.fmt(last.close);
+  }
+  function updateOHLC() {
+    const b = bars[bars.length - 1];
+    if (!b) { $("ohlc").textContent = "—"; return; }
+    const up = b.close >= b.open;
+    $("ohlc").innerHTML = `${tf} <b class="${up ? "up" : "down"}">${Alerter.fmt(b.close)}</b> O:${Alerter.fmt(b.open)} H:${Alerter.fmt(b.high)} L:${Alerter.fmt(b.low)} V:${Alerter.compact(b.volume)}`;
+  }
+  function updateCurSym() {
+    const m = feed.symbols.find(s => s.id === symbol);
+    $("curSym").textContent = (m ? (m.name && m.name !== m.id ? `${m.id} ${m.name}` : m.id) : "종목을 선택하세요") + ` · ${TF_LABEL[tf]}`;
+  }
+  function renderTFBar() {
+    document.querySelectorAll("#tfBar button").forEach(b => b.classList.toggle("active", b.dataset.tf === tf));
+  }
+
+  // ---------- 관심종목 ----------
+  const rows = {};
+  function renderWatchlist() {
+    const wl = $("watchlist");
+    wl.innerHTML = "";
+    for (const k in rows) delete rows[k];
+    feed.symbols.forEach(s => {
+      const d = document.createElement("div");
+      d.className = "wl" + (s.id === symbol ? " active" : "");
+      d.innerHTML = `<span class="nm">${s.id}<small>${s.name || ""}</small></span><b>—</b>`;
+      const rm = document.createElement("button");
+      rm.className = "rm"; rm.textContent = "✕"; rm.title = "삭제";
+      rm.onclick = e => {
+        e.stopPropagation();
+        feed.removeSymbol(s.id);
+        log("삭제: " + s.id);
+        if (symbol === s.id) { symbol = feed.symbols[0] ? feed.symbols[0].id : ""; updateCurSym(); renderWatchlist(); loadChart(); persistSyms(); }
+        else { renderWatchlist(); persistSyms(); }
+      };
+      d.appendChild(rm);
+      d.onclick = () => selectSymbol(s.id);
+      wl.appendChild(d); rows[s.id] = d;
+    });
+  }
+  function renderWatchlistBadge(symId) {
+    const el = rows[symId];
+    if (!el || el.querySelector(".hit")) return;
+    const i = document.createElement("span");
+    i.className = "hit"; i.textContent = "조건달성";
+    el.appendChild(i);
+    setTimeout(() => i.remove(), 5 * 60 * 1000);
+  }
+  feed.onWatch = spot => {
+    for (const id in spot) {
+      const el = rows[id]; if (!el) continue;
+      const b = el.querySelector("b");
+      if (b) b.textContent = Number(spot[id]).toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+    }
+  };
+  function persistSyms() {
+    S_save("symbols", feed.symbols);
+    S_save("current", symbol);
+    S_save("tf", tf);
+  }
+  function restoreSyms() {
+    const list = S_load("symbols", null);
+    if (list && list.length) feed.addSymbols(list.map(s => ({ id: s.id, name: s.name })));
+    else { feed.addSymbols(DEFAULT_SYMS); log(`관심종목 ${DEFAULT_SYMS.length}개 자동 등록`); }
+    symbol = S_load("current", "") || (feed.symbols[0] && feed.symbols[0].id) || "";
+  }
+
+  // ---------- 전체 스캔 (종목 × 감시TF) ----------
+  let scanning = false;
+  async function scanAll(manual) {
+    if (scanning || !feed.symbols.length) return;
+    scanning = true;
+    const tfs = watchTFs();
+    $("scanInfo").textContent = `스캔중… (${feed.symbols.length}종목 × ${tfs.join(",")})`;
+    for (const s of feed.symbols) {
+      for (const t of tfs) {
+        try {
+          const all = await feed.getBars(s.id, t, manual);
+          const computed = Indicators.computeAll(all, params());
+          if (s.id === symbol && t === tf) { bars = all; ind = computed; draw(); updateOHLC(); feed.emitLive(s.id, t); }
+          const i = all.length - 2;
+          if (i > 0) Alerter.evalBar(all, computed, i, params()).forEach(h => fire(s.id, t, all[i].time, h, false));
+        } catch (e) { if (manual) log(`스캔 실패 ${s.id}/${t}: ${e.message}`); }
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+    $("scanInfo").textContent = `마지막 스캔 ${new Date().toLocaleTimeString()} · ${feed.symbols.length}종목 × ${tfs.join(",")} · 완성봉`;
+    scanning = false;
+  }
+  let scanTimer = null;
+  function restartScanTimer() {
+    if (scanTimer) clearInterval(scanTimer);
+    scanTimer = setInterval(() => scanAll(false), Math.max(30, +$("pScanSec").value || 60) * 1000);
+  }
+
+  // ---------- 이벤트 ----------
+  document.querySelectorAll("#tfBar button").forEach(b => {
+    b.onclick = () => { tf = b.dataset.tf; persistSyms(); renderTFBar(); updateCurSym(); loadChart(); restartPolling(); };
+  });
+  ["tglMA", "tglBB", "tglPC", "tglVol"].forEach(id => $(id).onchange = draw);
+  $("btnFollow").onclick = () => { follow = true; offset = 0; $("btnFollow").classList.add("active"); draw(); };
+  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
+    $(id).onchange = () => {
+      persistParams(); restartScanTimer(); restartPolling();
+      if (bars.length) { ind = Indicators.computeAll(bars, params()); checkBars(symbol, tf, bars, false); draw(); }
+    };
+  });
+  $("pWake").onchange = keepAwake;
+  $("btnTestSound").onclick = () => { playAlert("PC"); setTimeout(() => playAlert("BB"), 600); log("테스트음 재생"); };
+  $("btnScanNow").onclick = () => scanAll(true);
+  $("btnPollNow").onclick = async () => { await loadChart(true); scanAll(true); };
+  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); };
+  document.querySelector('[data-page="page-alert"]').addEventListener("click", () => { $("alertBadge").hidden = true; });
+
+  function addCodes(text) {
+    const list = parseCodeText(text);
+    if (!list.length) { alert("인식된 종목이 없습니다. 예) 005930 삼성전자"); return; }
+    feed.addSymbols(list);
+    log(`${list.length}개 인식`);
+    renderWatchlist(); persistSyms();
+    if (!symbol) selectSymbol(list[0].id);
+  }
+  $("btnQuickAdd").onclick = () => {
+    const v = $("quickCode").value.trim(); if (!v) return;
+    addCodes(v); $("quickCode").value = "";
+    const list = parseCodeText(v);
+    if (list.length) selectSymbol(list[0].id);
+  };
+  $("quickCode").addEventListener("keydown", e => { if (e.key === "Enter") $("btnQuickAdd").click(); });
+  $("btnLoadCodes").onclick = () => { addCodes($("codeBox").value); $("codeBox").value = ""; };
+  $("fileInput").addEventListener("change", e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => addCodes(String(r.result || ""));
+    r.readAsText(f, "utf-8");
+    e.target.value = "";
+  });
+  $("btnSample").onclick = () => { addCodes(DEFAULT_SYMS.map(s => `${s.id} ${s.name}`).join("\n")); };
+
+  function setConn() {
+    const dot = $("connDot"), txt = $("connText");
+    dot.className = "dot online"; txt.textContent = "야후";
+  }
+  function restartPolling() {
+    feed.pollSec = Math.max(15, +$("pollSec").value || 20);
+    feed.startPolling(tf, () => { if (symbol) { checkBars(symbol, tf, bars, true); draw(); updateOHLC(); } });
+  }
+
+  // ---------- 시작 ----------
+  restoreParams(); restoreSyms();
+  if (!symbol) symbol = feed.symbols[0].id;
+  feed.pollSec = Math.max(15, +$("pollSec").value || 20);
+  renderTFBar(); updateCurSym(); renderWatchlist(); setConn(); keepAwake();
+  restartScanTimer(); restartPolling();
+  resize();
+  loadChart().then(() => scanAll());
+  log("멀티TF 알리미 시작 (30m·1h·4h·1D, 야후)");
+})();
