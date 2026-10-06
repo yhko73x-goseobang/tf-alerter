@@ -493,7 +493,8 @@
     S_save("sigseq", seq);
     fires.push({ symId, tfKey, type: hit.type, barTime, wall: Date.now(), seq });
     buyMarks.set(key, { symId, tfKey, barTime, type: hit.type, price });
-    if (buyMarks.size > 300) buyMarks.delete(buyMarks.keys().next().value);
+    if (buyMarks.size > 1000) buyMarks.delete(buyMarks.keys().next().value);
+    saveSigState();
     playAlert(hit.type);
     notify(`[${tfKey}] ${symId} ${hit.type}`, hit.label);
     alertLog(`[${tfKey}] ${symId} · ${hit.label}${isLive ? " (진행봉)" : " (완성봉)"}`, hit.type);
@@ -518,6 +519,25 @@
     Alerter.evalBar(allBars, computed, i, p).forEach(h => fire(symId, tfKey, allBars[i].time, h, live, allBars[i].low));
   }
 
+  // ---------- 신호 영구 저장 (매수라벨·보드·최신신호 유지) ----------
+  let sigSaveT = null;
+  function saveSigState() {
+    clearTimeout(sigSaveT);
+    sigSaveT = setTimeout(() => {
+      try {
+        S_save("marks", [...buyMarks].slice(-1000));
+        S_save("lasthits", [...lastHits]);
+        S_save("fires", fires.slice(-3000));
+      } catch (_) {}
+    }, 1500);
+  }
+  function restoreSigState() {
+    try {
+      (S_load("marks", []) || []).forEach(([k, v]) => { if (v && v.symId && v.barTime) buyMarks.set(k, v); });
+      (S_load("lasthits", []) || []).forEach(([k, v]) => { if (v) lastHits.set(k, v); });
+      (S_load("fires", []) || []).forEach(f => { if (f && f.symId) fires.push(f); });
+    } catch (_) {}
+  }
   // ---------- 종목/차트 로드 ----------
   function parseCodeText(text) {
     const out = [];
@@ -860,7 +880,7 @@
   $("btnTestSound").onclick = () => { playAlert("PC"); log("테스트음 재생"); };
   $("btnScanNow").onclick = () => scanAll(true);
   $("btnPollNow").onclick = async () => { await loadChart(true); scanAll(true); };
-  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); fires.length = 0; boardOrder = []; boardOrderTs = 0; hitMarks.clear(); lastHits.clear(); buyMarks.clear(); markIdx = null; renderStrip(); draw(); };
+  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); fires.length = 0; boardOrder = []; boardOrderTs = 0; hitMarks.clear(); lastHits.clear(); buyMarks.clear(); markIdx = null; try { localStorage.removeItem("a30_marks"); localStorage.removeItem("a30_lasthits"); localStorage.removeItem("a30_fires"); } catch (_) {} renderStrip(); draw(); };
   document.querySelector('[data-page="page-alert"]').addEventListener("click", () => { $("alertBadge").hidden = true; });
 
   function addCodes(text, jumpSingle) {
@@ -919,6 +939,7 @@
 
   // ---------- 시작 ----------
   restoreParams(); restoreSyms();
+  restoreSigState(); // 이전 매수신호·보드 복원
   if (S_load("paramver", 0) < 2) { // 감시 시간대 기본값: 5분·15분·1일만
     ["w1m", "w3m", "w5m", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => { $(id).checked = ["w5m", "w15m", "w1D"].includes(id); });
     persistParams();
