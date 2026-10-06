@@ -620,9 +620,9 @@
   const TFTXT = { "1h": "#231a00", "5m": "#231a00" };
   function tfWindowMs(t) {
     const s = (Feed30m.TFS[t] || { sec: 1800 }).sec;
-    if (s <= 3600) return 3600000; // 단기: 직전 1시간
-    if (s <= 14400) return 8 * 3600000; // 4h: 2봉
-    return 48 * 3600000; // 1D: 2봉
+    if (s <= 3600) return 3600000; // 단기(1분~1시간): 직전 1시간만
+    if (s <= 14400) return 8 * 3600000; // 4h: 2봉 유지
+    return 48 * 3600000; // 1D: 2봉 유지
   }
   let boardOrder = [], boardOrderTs = 0;
   const hitMarks = new Map(); // id -> {type, tfKey, time} — 종목탭 �지용(유지)
