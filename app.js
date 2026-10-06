@@ -642,6 +642,22 @@
   }
   const rows = {};
   const chg = new Map(); // id -> 전일비 %
+  function dayKey(t) {
+    const d = new Date(t * 1000);
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  }
+  // 1일봉 없을 때: 당일 첫 봉 시가 기준 장중 등락율
+  function sessionChg(all) {
+    if (!all || all.length < 2) return null;
+    const last = all[all.length - 1];
+    const k = dayKey(last.time);
+    let first = null;
+    for (const b of all) {
+      if (dayKey(b.time) === k) { first = b; break; }
+    }
+    if (!first || !first.open) return null;
+    return (last.close - first.open) / first.open * 100;
+  }
   function paintRow(id) {
     const el = rows[id];
     if (!el) return;
@@ -664,7 +680,7 @@
     feed.symbols.forEach(s => {
       const d = document.createElement("div");
       d.className = "wl" + (s.id === symbol ? " active" : "");
-      d.innerHTML = `<input class="ack" type="checkbox" title="얼럿 감시" /><span class="nm">${s.id}<small>${s.name || ""}</small></span><span class="pr"><b>—</b><i></i></span>`;
+      d.innerHTML = `<input class="ack" type="checkbox" title="얼럿 감시" /><span class="nm"><b>${s.id}</b><span>${s.name || ""}</span></span><span class="pr"><b>—</b><i></i></span>`;
       const ack = d.querySelector(".ack");
       ack.checked = s.alert !== false;
       ack.onclick = e => {
@@ -754,6 +770,9 @@
           if (t === "1D" && all.length >= 2) {
             const prev = all[all.length - 2].close, last = all[all.length - 1].close;
             if (prev) { chg.set(s.id, (last - prev) / prev * 100); paintRow(s.id); }
+          } else if (!chg.has(s.id)) {
+            const c = sessionChg(all);
+            if (c != null && isFinite(c)) { chg.set(s.id, c); paintRow(s.id); }
           }
           const i = all.length - 2;
           if (i > 0) Alerter.evalBar(all, computed, i, params()).forEach(h => fire(s.id, t, all[i].time, h, false));
@@ -805,22 +824,16 @@
   $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); fires.length = 0; boardOrder = []; boardOrderTs = 0; hitMarks.clear(); lastHits.clear(); buyMarks.clear(); markIdx = null; renderStrip(); draw(); };
   document.querySelector('[data-page="page-alert"]').addEventListener("click", () => { $("alertBadge").hidden = true; });
 
-  function addCodes(text) {
+  function addCodes(text, jumpSingle) {
     const list = parseCodeText(text);
     if (!list.length) { alert("인식된 종목이 없습니다. 예) 005930 삼성전자"); return; }
     feed.addSymbols(list);
     log(`${list.length}개 인식`);
     renderWatchlist(); persistSyms();
-    if (!symbol) selectSymbol(list[0].id);
+    if (jumpSingle && list.length === 1) selectSymbol(list[0].id);
+    else if (!symbol) selectSymbol(list[0].id);
   }
-  $("btnQuickAdd").onclick = () => {
-    const v = $("quickCode").value.trim(); if (!v) return;
-    addCodes(v); $("quickCode").value = "";
-    const list = parseCodeText(v);
-    if (list.length) selectSymbol(list[0].id);
-  };
-  $("quickCode").addEventListener("keydown", e => { if (e.key === "Enter") $("btnQuickAdd").click(); });
-  $("btnLoadCodes").onclick = () => { addCodes($("codeBox").value); $("codeBox").value = ""; };
+  $("btnLoadCodes").onclick = () => { addCodes($("codeBox").value, true); $("codeBox").value = ""; };
   $("fileInput").addEventListener("change", e => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
