@@ -28,23 +28,27 @@
 
   // 주의: 야후는 ACAO:* 응답이라 credentials:include를 쓰면
   // 브라우저 CORS 검사에서 전부 차단됨. 쿠키 없이 요청해야 함.
+  // 요청 제한 차단기: 네트워크 실패 연속 6회면 90초 휴식
+  let netFail = 0, coolUntil = 0;
   async function fetchYahooJson(url) {
+    if (Date.now() < coolUntil) throw new Error("야후 요청 제한 중 — 잠시 후 자동 재개");
     const direct = [url, url.replace("query1.", "query2.")];
     let err = null, firstErr = null;
-    const note = e => { if (!firstErr) firstErr = e; err = e; };
-    for (const u of direct) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const r = await fetch(u, { headers: { Accept: "application/json" } });
-          const t = await r.text();
-          if (!r.ok) { note(new Error("야후 HTTP " + r.status)); break; }
-          if (t.charAt(0) === "<") { note(new Error("야후 차단페이지 응답")); break; }
-          return JSON.parse(t);
-        } catch (e) {
-          note(e);
-          if (attempt === 0) await new Promise(res => setTimeout(res, 800));
-        }
+    const note = e => {
+      if (!firstErr) firstErr = e; err = e;
+      if (/Failed to fetch|Load failed|NetworkError|network/i.test(e.message || "")) {
+        if (++netFail >= 6) coolUntil = Date.now() + 90000;
       }
+    };
+    for (const u of direct) {
+      try {
+        const r = await fetch(u, { headers: { Accept: "application/json" } });
+        const t = await r.text();
+        if (!r.ok) { note(new Error("야후 HTTP " + r.status)); break; }
+        if (t.charAt(0) === "<") { note(new Error("야후 차단페이지 응답")); break; }
+        netFail = 0;
+        return JSON.parse(t);
+      } catch (e) { note(e); }
     }
     // 공개 프록시 경유 (서버 없이 폰에서 직접)
     try {

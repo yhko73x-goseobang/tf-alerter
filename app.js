@@ -395,13 +395,14 @@
     for (const s of feed.symbols) {
       for (const t of tfs) {
         try {
-          const all = await feed.getBars(s.id, t, manual);
+          // 수동 스캔도 현재 차트만 강제, 나머지는 캐시 존중 (요청 폭증 방지)
+          const all = await feed.getBars(s.id, t, manual && s.id === symbol && t === tf);
           const computed = Indicators.computeAll(all, params());
           if (s.id === symbol && t === tf) { bars = all; ind = computed; draw(); updateOHLC(); feed.emitLive(s.id, t); }
           const i = all.length - 2;
           if (i > 0) Alerter.evalBar(all, computed, i, params()).forEach(h => fire(s.id, t, all[i].time, h, false));
         } catch (e) { if (manual) log(`스캔 실패 ${s.id}/${t}: ${e.message}`); }
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 400));
       }
     }
     $("scanInfo").textContent = `마지막 스캔 ${new Date().toLocaleTimeString()} · ${feed.symbols.length}종목 × ${tfs.join(",")} · 완성봉`;
