@@ -368,6 +368,8 @@
     notify(`[${tfKey}] ${symId} ${hit.type}`, hit.label);
     alertLog(`[${tfKey}] ${symId} · ${hit.label}${isLive ? " (진행봉)" : " (완성봉)"}`, hit.type);
     renderWatchlistBadge(symId);
+    hitMarks.set(symId, { type: hit.type, time: Date.now() });
+    renderStrip();
     showToast(symId, tfKey, hit);
     if (symId === symbol && tfKey === tf) {
       const f = $("alertFlash");
@@ -447,6 +449,7 @@
 
   // ---------- 차트 하단 종목 스트립 ----------
   let stripX = 0, stripMoved = false;
+  const hitMarks = new Map(); // id -> {type, time} — 신호 발생 종목 표시용
   function renderStrip() {
     const el = $("symStrip");
     el.innerHTML = "";
@@ -455,6 +458,8 @@
       b.textContent = (s.name && s.name !== s.id) ? `${s.id} ${s.name}` : s.id;
       b.title = s.id;
       if (s.id === symbol) b.classList.add("active");
+      const hm = hitMarks.get(s.id);
+      if (hm) { b.classList.add("hit-" + hm.type.toLowerCase()); b.title = `${s.id} · ${hm.type} 신호`; }
       b.onclick = () => selectSymbol(s.id);
       el.appendChild(b);
       if (s.id === symbol) setTimeout(() => b.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }), 50);
@@ -570,7 +575,7 @@
   $("btnTestSound").onclick = () => { playAlert("PC"); setTimeout(() => playAlert("BB"), 600); log("테스트음 재생"); };
   $("btnScanNow").onclick = () => scanAll(true);
   $("btnPollNow").onclick = async () => { await loadChart(true); scanAll(true); };
-  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); };
+  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); hitMarks.clear(); renderStrip(); };
   document.querySelector('[data-page="page-alert"]').addEventListener("click", () => { $("alertBadge").hidden = true; });
 
   function addCodes(text) {
