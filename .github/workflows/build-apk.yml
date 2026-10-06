@@ -39,7 +39,7 @@ jobs:
           ls www
       - name: Init + Add Android
         run: |
-          npx cap init "30m알리미" com.alerter.tf30m --web-dir=www || true
+          npx cap init "국내상장관심종목타점알리미" com.alerter.tf30m --web-dir=www || true
           npx cap add android || true
           npx cap sync android
       - name: Allow cleartext traffic
