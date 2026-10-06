@@ -12,12 +12,12 @@
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-<header class="appbar">
-  <div class="appbar-top">
-    <strong>⏰ 알리미</strong>
-    <span class="conn"><span id="connDot" class="dot sim"></span><span id="connText">시뮬</span></span>
-  </div>
+<header class="appbar one-line">
+  <strong>⏰ 알리미</strong>
   <div class="cur-sym" id="curSym">—</div>
+  <button class="ind-mini" id="indHead">지표 <i id="indArrow">▼</i></button>
+  <button id="btnFollow" class="active">▶ 추적</button>
+  <span class="conn"><span id="connDot" class="dot sim"></span><span id="connText">야후</span></span>
 </header>
 
 <main class="pages">
@@ -25,10 +25,6 @@
   <section class="page active" id="page-chart">
     <div class="toast" id="alertToast" hidden></div>
     <div class="ind-bar collapsed" id="indBar">
-      <div class="ind-head" id="indHead">
-        <span>지표 MA·BB·PC·거래량 <i id="indArrow">▼</i></span>
-        <button id="btnFollow" class="active">▶ 추적</button>
-      </div>
       <div class="ind-body">
         <label><input type="checkbox" id="tglMA" checked /> MA</label>
         <label><input type="checkbox" id="tglBB" checked /> BB</label>
@@ -48,6 +44,7 @@
       <canvas id="chart"></canvas>
       <div class="alert-flash" id="alertFlash" hidden></div>
     </div>
+    <div class="resizer" id="resizer" title="위아래로 밀어 차트 높이 조절 (더블탭=원래대로)"></div>
     <div class="statusline"><span id="feedInfo">30m · 대기</span><span id="priceInfo">—</span></div>
     <div class="sym-strip" id="symStrip"></div>
   </section>

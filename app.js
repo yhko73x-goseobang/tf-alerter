@@ -152,8 +152,41 @@
 
   let dragX = null, dragOff = 0, pinchD = 0, pinchPR = 0;
   let downT = 0, downX = 0, downY = 0, flingOff = false;
-  cv.addEventListener("pointerdown", e => { dragX = e.clientX; dragOff = offset; downT = Date.now(); downX = e.clientX; downY = e.clientY; flingOff = false; cv.setPointerCapture(e.pointerId); });
+  let hDrag = null; // {startY, startH, dir} 차트 높이 조절 중
+  function chartHMin() { return 180; }
+  function chartHMax() { return Math.round(window.innerHeight * 0.75); }
+  function applyChartH(px, save) {
+    const wrap = $("chartWrap");
+    const h = Math.min(chartHMax(), Math.max(chartHMin(), Math.round(px)));
+    wrap.style.height = h + "px";
+    if (save) { try { localStorage.setItem("a30_charth", String(h)); } catch (_) {} }
+  }
+  try {
+    const savedH = parseInt(localStorage.getItem("a30_charth") || "", 10);
+    if (savedH >= chartHMin()) $("chartWrap").style.height = Math.min(chartHMax(), savedH) + "px";
+  } catch (_) {}
+  // 구분선 드래그: 아래로 밀면 차트 커짐
+  (function () {
+    const rz = $("resizer");
+    let sy = 0, sh = 0, on = false;
+    rz.addEventListener("pointerdown", e => { on = true; sy = e.clientY; sh = $("chartWrap").getBoundingClientRect().height; rz.setPointerCapture(e.pointerId); });
+    rz.addEventListener("pointermove", e => { if (on) applyChartH(sh + (e.clientY - sy), true); });
+    rz.addEventListener("pointerup", () => { on = false; });
+    rz.addEventListener("dblclick", () => { $("chartWrap").style.height = ""; try { localStorage.removeItem("a30_charth"); } catch (_) {} });
+  })();
+  cv.addEventListener("pointerdown", e => {
+    const r = cv.getBoundingClientRect();
+    // 가격축(오른쪽 58px)을 잡으면 높이 조절 모드: 아래로 쓸면 낮아짐
+    if (e.clientX - r.left > r.width - 58) {
+      hDrag = { startY: e.clientY, startH: $("chartWrap").getBoundingClientRect().height };
+      dragX = null; flingOff = true;
+      cv.setPointerCapture(e.pointerId);
+      return;
+    }
+    dragX = e.clientX; dragOff = offset; downT = Date.now(); downX = e.clientX; downY = e.clientY; flingOff = false; cv.setPointerCapture(e.pointerId);
+  });
   cv.addEventListener("pointermove", e => {
+    if (hDrag) { applyChartH(hDrag.startH - (e.clientY - hDrag.startY), true); return; }
     if (dragX == null) return;
     // 손가락을 따라 차트가 같이 밀리도록 (오른쪽으로 밀면 과거로)
     offset = Math.max(0, Math.round(dragOff + (e.clientX - dragX) / perRow));
@@ -161,6 +194,7 @@
     draw();
   });
   cv.addEventListener("pointerup", e => {
+    hDrag = null;
     dragX = null;
     // 빠른 좌우 플릭이면 관심종목 이전/다음으로 전환 (천천히 밀면 팬 유지)
     if (!flingOff) {
@@ -279,6 +313,21 @@
     }
     const last = bars[bars.length - 1];
     const upLast = last.close >= last.open;
+    // 종목 워터마크 (거래량 위, 영역 추가 없이 한 줄·자동 글자크기)
+    (function () {
+      const m = feed.symbols.find(s => s.id === symbol);
+      const label = m ? ((m.name && m.name !== m.id) ? `${m.id} ${m.name}` : m.id) : symbol;
+      if (!label) return;
+      let fs = 13 * dpr;
+      ctx.font = `${fs}px sans-serif`;
+      const wmax = plotW - 16 * dpr;
+      const tw = ctx.measureText(label).width;
+      if (tw > wmax) { fs = Math.max(8 * dpr, fs * wmax / tw); ctx.font = `${fs}px sans-serif`; }
+      ctx.save();
+      ctx.globalAlpha = 0.35; ctx.fillStyle = "#fff"; ctx.textAlign = "left";
+      ctx.fillText(label, 8 * dpr, baseY - volH - 6 * dpr);
+      ctx.restore();
+    })();
     // 신호 자리 매수 라벨 (봉 저가 아래)
     if (buyMarks.size) {
       if (!markIdx || markIdx.bars !== bars) {
@@ -619,11 +668,11 @@
   });
   ["tglMA", "tglBB", "tglPC", "tglVol"].forEach(id => $(id).onchange = draw);
   // ---------- 지표 접기/펼치기 (기본 접힘) ----------
-  try { if (localStorage.getItem("a30_indopen") === "1") $("indBar").classList.remove("collapsed"); } catch (_) {}
-  $("indHead").onclick = e => {
-    if (e.target.closest("#btnFollow")) return;
+  try { if (localStorage.getItem("a30_indopen") === "1") { $("indBar").classList.remove("collapsed"); $("indArrow").textContent = "▲"; } } catch (_) {}
+  $("indHead").onclick = () => {
     const bar = $("indBar");
     bar.classList.toggle("collapsed");
+    $("indArrow").textContent = bar.classList.contains("collapsed") ? "▼" : "▲";
     try { localStorage.setItem("a30_indopen", bar.classList.contains("collapsed") ? "0" : "1"); } catch (_) {}
   };
   $("btnFollow").onclick = () => { follow = true; offset = 0; $("btnFollow").classList.add("active"); draw(); };
