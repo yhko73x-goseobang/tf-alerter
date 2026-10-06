@@ -191,8 +191,8 @@
   cv.addEventListener("pointermove", e => {
     if (hDrag) { applyChartH(hDrag.startH - (e.clientY - hDrag.startY), true); return; }
     if (dragX == null) return;
-    // 손가락을 따라 차트가 같이 밀리도록 (오른쪽으로 밀면 과거로)
-    offset = Math.max(0, Math.round(dragOff + (e.clientX - dragX) / perRow));
+    // 손가락을 따라 차트가 같이 밀리도록 (오른쪽으로 밀면 과거로, 왼쪽 한계 -8 미래공간)
+    offset = Math.min(bars.length + 7, Math.max(-8, Math.round(dragOff + (e.clientX - dragX) / perRow)));
     follow = false; $("btnFollow").classList.remove("active");
     draw();
   });
@@ -233,24 +233,31 @@
       ctx.fillText("종목을 선택하세요 (야후 " + tf + ")", 16 * dpr, 30 * dpr);
       return;
     }
-    const n = Math.min(bars.length, Math.floor(W / dpr / perRow) + 5);
-    const end = bars.length - offset;
-    const view = bars.slice(Math.max(0, end - n), Math.max(0, end));
-    if (!view.length) return;
-    let hi = -Infinity, lo = Infinity, vmax = 1;
-    view.forEach(b => { hi = Math.max(hi, b.high); lo = Math.min(lo, b.low); vmax = Math.max(vmax, b.volume); });
-    const pad = (hi - lo) * 0.08 || 1; hi += pad; lo -= pad;
     const axisH = 20 * dpr, axisW = 58 * dpr, bodyH = H - axisH, plotW = W - axisW;
+    const PAD = 3, MAXFUT = 8; // 오른쪽 여백 봉 수·미래 팬 한계
+    const L = bars.length + PAD;
+    const n = Math.min(L + MAXFUT, Math.floor(plotW / dpr / perRow) + 5);
+    const end = Math.min(L + MAXFUT, Math.max(n, L - offset));
+    const start = end - n;
+    const slot = j => { const idx = start + j; return (idx >= 0 && idx < bars.length) ? bars[idx] : null; };
+    let hasData = false;
+    for (let j = 0; j < n; j++) { if (slot(j)) { hasData = true; break; } }
+    if (!hasData) return;
+    let hi = -Infinity, lo = Infinity, vmax = 1;
+    for (let j = 0; j < n; j++) { const b = slot(j); if (!b) continue; hi = Math.max(hi, b.high); lo = Math.min(lo, b.low); vmax = Math.max(vmax, b.volume); }
+    const pad = (hi - lo) * 0.08 || 1; hi += pad; lo -= pad;
     const volH = bodyH * 0.16, priceH = bodyH - volH - 8 * dpr;
     const y = p => priceH - (p - lo) / (hi - lo) * priceH;
     const baseY = bodyH; // 거래량 바닥 = 시간축 위
-    const stepX = plotW / view.length;
+    const stepX = plotW / n;
     const p = params();
 
     ctx.strokeStyle = "#1e2a44"; ctx.lineWidth = 1;
     for (let g = 0; g < 4; g++) { const gy = priceH * (g + 1) / 5; ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
 
-    view.forEach((b, i) => {
+    for (let i = 0; i < n; i++) {
+      const b = slot(i);
+      if (!b) continue;
       const x = (i + 0.5) * stepX;
       const up = b.close >= b.open;
       ctx.strokeStyle = ctx.fillStyle = up ? "#26a69a" : "#ef5350";
@@ -264,18 +271,18 @@
         ctx.fillRect(x - bw / 2, baseY - vh, bw, vh);
         ctx.globalAlpha = 1;
       }
-    });
+    }
 
-    const gi = end - view.length;
+    const gi = start;
     function line(arr, color, dash, wMul) {
       ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, 1.2 * dpr) * (wMul || 1); ctx.setLineDash(dash || []);
       ctx.beginPath(); let started = false;
-      view.forEach((_, i) => {
+      for (let i = 0; i < n; i++) {
         const v = arr[gi + i];
-        if (v == null) { started = false; return; }
+        if (v == null) { started = false; continue; }
         const x = (i + 0.5) * stepX, yy = y(v);
         if (!started) { ctx.moveTo(x, yy); started = true; } else ctx.lineTo(x, yy);
-      });
+      }
       ctx.stroke(); ctx.setLineDash([]);
     }
     if (ind) {
@@ -286,7 +293,7 @@
         p.maLengths.forEach((len, k) => {
           if (len !== 100 && len !== 200) return;
           const arr = ind.mas[len] || [];
-          let li = Math.min(arr.length - 1, gi + view.length - 1);
+          let li = Math.min(arr.length - 1, gi + n - 1);
           while (li >= gi && arr[li] == null) li--;
           if (li < gi) return;
           const tx = String(len), col = MA_COLORS[k % MA_COLORS.length];
@@ -305,12 +312,12 @@
         const vma20 = Indicators.sma(bars.map(b => b.volume), 20);
         ctx.strokeStyle = "#e0e0e0"; ctx.lineWidth = Math.max(1, 1 * dpr);
         ctx.beginPath(); let started = false;
-        view.forEach((_, i) => {
+        for (let i = 0; i < n; i++) {
           const v = vma20[gi + i];
-          if (v == null) { started = false; return; }
+          if (v == null) { started = false; continue; }
           const x = (i + 0.5) * stepX, yy = baseY - (v / vmax) * volH;
           if (!started) { ctx.moveTo(x, yy); started = true; } else ctx.lineTo(x, yy);
-        });
+        }
         ctx.stroke();
       }
     }
@@ -385,12 +392,14 @@
     ctx.fillStyle = "#7d8aa3"; ctx.font = `${10 * dpr}px sans-serif`; ctx.textAlign = "center";
     const ticks = Math.max(2, Math.min(5, Math.floor(W / dpr / 90)));
     for (let k = 1; k <= ticks; k++) {
-      const i = Math.min(view.length - 1, Math.floor(view.length * k / (ticks + 0.5)) - 1);
+      const i = Math.min(n - 1, Math.floor(n * k / (ticks + 0.5)) - 1);
       if (i < 0) continue;
+      const b = slot(i);
+      if (!b) continue;
       const x = (i + 0.5) * stepX;
       ctx.strokeStyle = "#16203a";
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, bodyH); ctx.stroke();
-      ctx.fillText(fmtAxis(view[i].time), Math.min(Math.max(x, 30 * dpr), plotW - 30 * dpr), bodyH + 14 * dpr);
+      ctx.fillText(fmtAxis(b.time), Math.min(Math.max(x, 30 * dpr), plotW - 30 * dpr), bodyH + 14 * dpr);
     }
     ctx.textAlign = "left";
     // 신호 자리 매수 라벨 (맨 위에 그려 가려지지 않게)
@@ -408,7 +417,7 @@
         const bi = markIdx.map.get(mk.barTime);
         if (bi == null) return;
         const vi = bi - gi;
-        if (vi < 0 || vi >= view.length) return;
+        if (vi < 0 || vi >= n) return;
         const label = "매수";
         const tw = ctx.measureText(label).width + 10 * dpr;
         const bx = Math.min(Math.max((vi + 0.5) * stepX, tw / 2 + 2 * dpr), plotW - tw / 2 - 2 * dpr);
