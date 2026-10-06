@@ -470,7 +470,7 @@
   }
   function updateCurSym() {
     const m = feed.symbols.find(s => s.id === symbol);
-    $("curSym").textContent = (m ? (m.name && m.name !== m.id ? `${m.id} ${m.name}` : m.id) : "종목을 선택하세요") + ` · ${TF_LABEL[tf]}`;
+    $("curSym").textContent = m ? (m.name && m.name !== m.id ? `${m.id} ${m.name}` : m.id) : "종목을 선택하세요";
   }
   function renderTFBar() {
     document.querySelectorAll("#tfBar button").forEach(b => b.classList.toggle("active", b.dataset.tf === tf));
@@ -552,6 +552,31 @@
     symbol = S_load("current", "") || (feed.symbols[0] && feed.symbols[0].id) || "";
   }
 
+  // ---------- 종목 좌우 스와이프 순차 이동 (상하는 기본 스크롤) ----------
+  function stepSymbol(dir) {
+    if (feed.symbols.length < 2) return;
+    const i = feed.symbols.findIndex(s => s.id === symbol);
+    const n = feed.symbols.length;
+    const next = feed.symbols[(i + dir + n) % n];
+    if (next && next.id !== symbol) selectSymbol(next.id);
+  }
+  function addSwipeNav(el) {
+    let sx = null, sy = null;
+    el.addEventListener("touchstart", e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+    el.addEventListener("touchmove", e => {
+      if (sx == null) return;
+      const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        stepSymbol(dx < 0 ? 1 : -1); // 좌로 밀면 다음, 우로 밀면 이전
+        sx = t.clientX; sy = t.clientY; // 기준점 갱신 → 계속 밀면 연속 이동
+        e.preventDefault();
+      }
+    }, { passive: false });
+    el.addEventListener("touchend", () => { sx = null; });
+  }
+  addSwipeNav($("symStrip"));
+  addSwipeNav($("watchlist"));
+
   // ---------- 전체 스캔 (종목 × 감시TF) ----------
   let scanning = false;
   async function scanAll(manual) {
@@ -593,6 +618,14 @@
     b.onclick = () => { tf = b.dataset.tf; persistSyms(); renderTFBar(); updateCurSym(); loadChart(); restartPolling(); };
   });
   ["tglMA", "tglBB", "tglPC", "tglVol"].forEach(id => $(id).onchange = draw);
+  // ---------- 지표 접기/펼치기 (기본 접힘) ----------
+  try { if (localStorage.getItem("a30_indopen") === "1") $("indBar").classList.remove("collapsed"); } catch (_) {}
+  $("indHead").onclick = e => {
+    if (e.target.closest("#btnFollow")) return;
+    const bar = $("indBar");
+    bar.classList.toggle("collapsed");
+    try { localStorage.setItem("a30_indopen", bar.classList.contains("collapsed") ? "0" : "1"); } catch (_) {}
+  };
   $("btnFollow").onclick = () => { follow = true; offset = 0; $("btnFollow").classList.add("active"); draw(); };
   ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
     $(id).onchange = () => {
