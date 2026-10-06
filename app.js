@@ -316,16 +316,26 @@
     // 종목 워터마크 (거래량 위, 영역 추가 없이 한 줄·자동 글자크기)
     (function () {
       const m = feed.symbols.find(s => s.id === symbol);
-      const label = m ? ((m.name && m.name !== m.id) ? `${m.id} ${m.name}` : m.id) : symbol;
-      if (!label) return;
+      const base = m ? ((m.name && m.name !== m.id) ? `${m.id} ${m.name}` : m.id) : symbol;
+      if (!base) return;
+      const lh = lastHits.get(symbol);
+      const TN = { PC: "PC하단", BB: "BB하단", MA200: "MA200", VOL: "거래량↑" };
+      const TCOL = { PC: "#ffb300", BB: "#5c9dff", MA200: "#ce93d8", VOL: "#4db6ac" };
+      const suffix = lh ? ` · ${TN[lh.type] || lh.type}[${lh.tfKey}]` : "";
+      const label = base + suffix;
       let fs = 13 * dpr;
       ctx.font = `${fs}px sans-serif`;
       const wmax = plotW - 16 * dpr;
       const tw = ctx.measureText(label).width;
       if (tw > wmax) { fs = Math.max(8 * dpr, fs * wmax / tw); ctx.font = `${fs}px sans-serif`; }
       ctx.save();
-      ctx.globalAlpha = 0.35; ctx.fillStyle = "#fff"; ctx.textAlign = "left";
-      ctx.fillText(label, 8 * dpr, baseY - volH - 6 * dpr);
+      ctx.globalAlpha = 0.7; ctx.fillStyle = "#fff"; ctx.textAlign = "left";
+      ctx.fillText(base, 8 * dpr, baseY - volH - 6 * dpr);
+      if (suffix) {
+        const bw = ctx.measureText(base).width;
+        ctx.fillStyle = TCOL[lh.type] || "#ffb300";
+        ctx.fillText(suffix, 8 * dpr + bw, baseY - volH - 6 * dpr);
+      }
       ctx.restore();
     })();
     ctx.strokeStyle = upLast ? "#26a69a" : "#ef5350";
@@ -447,7 +457,8 @@
     notify(`[${tfKey}] ${symId} ${hit.type}`, hit.label);
     alertLog(`[${tfKey}] ${symId} · ${hit.label}${isLive ? " (진행봉)" : " (완성봉)"}`, hit.type);
     renderWatchlistBadge(symId);
-    hitMarks.set(symId, { type: hit.type, time: Date.now() });
+    hitMarks.set(symId, { type: hit.type, tfKey, time: Date.now() });
+    lastHits.set(symId, { type: hit.type, tfKey });
     renderStrip();
     showToast(symId, tfKey, hit);
     if (symId === symbol && tfKey === tf) {
@@ -529,6 +540,7 @@
   // ---------- 차트 하단 종목 스트립 (빈칸 없이 꽉 채우기) ----------
   let stripX = 0, stripMoved = false;
   const hitMarks = new Map(); // id -> {type, time} — 신호 발생 종목 표시용
+  const lastHits = new Map(); // id -> {type, tfKey} — 종목명 옆 표시용 최신 신호
   function stripCols(n) {
     const c = [3, 4, 5, 6];
     let best = 3, br = 99;
@@ -549,7 +561,7 @@
       b.title = s.id;
       if (s.id === symbol) b.classList.add("active");
       const hm = hitMarks.get(s.id);
-      if (hm) { b.classList.add("hit-" + hm.type.toLowerCase()); b.title = `${s.id} · ${hm.type} 신호`; }
+      if (hm) { b.classList.add("hit-" + hm.tfKey.toLowerCase()); b.title = `${s.id} · ${hm.type}[${hm.tfKey}] 신호`; }
       b.onclick = () => selectSymbol(s.id);
       el.appendChild(b);
       if (s.id === symbol) setTimeout(() => b.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }), 50);
@@ -698,7 +710,7 @@
   $("btnTestSound").onclick = () => { playAlert("PC"); setTimeout(() => playAlert("BB"), 600); log("테스트음 재생"); };
   $("btnScanNow").onclick = () => scanAll(true);
   $("btnPollNow").onclick = async () => { await loadChart(true); scanAll(true); };
-  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); hitMarks.clear(); buyMarks.clear(); markIdx = null; renderStrip(); draw(); };
+  $("btnClearAlerts").onclick = () => { $("alertLog").innerHTML = ""; $("alertBadge").hidden = true; fired.clear(); hitMarks.clear(); lastHits.clear(); buyMarks.clear(); markIdx = null; renderStrip(); draw(); };
   document.querySelector('[data-page="page-alert"]').addEventListener("click", () => { $("alertBadge").hidden = true; });
 
   function addCodes(text) {
