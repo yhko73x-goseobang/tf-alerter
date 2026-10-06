@@ -30,12 +30,17 @@
   // 브라우저 CORS 검사에서 전부 차단됨. 쿠키 없이 요청해야 함.
   // 요청 제한 차단기: 네트워크 실패 연속 6회면 90초 휴식
   let netFail = 0, coolUntil = 0;
-  async function fetchYahooJson(url) {
+  // 자체 중계 서버 (Cloudflare Worker, 앱 설정에서 입력. 없으면 건너뜀)
+  function relay() {
+    try { return (Feed.proxyUrl || localStorage.getItem("a30_proxy") || "").replace(/\/+$/, ""); }
+    catch (_) { return Feed.proxyUrl || ""; }
+  }
+  async function fetchDirectJson(url) {
     if (Date.now() < coolUntil) throw new Error("야후 요청 제한 중 — 잠시 후 자동 재개");
     const direct = [url, url.replace("query1.", "query2.")];
-    let err = null, firstErr = null;
+    let firstErr = null;
     const note = e => {
-      if (!firstErr) firstErr = e; err = e;
+      if (!firstErr) firstErr = e;
       if (/Failed to fetch|Load failed|NetworkError|network/i.test(e.message || "")) {
         if (++netFail >= 6) coolUntil = Date.now() + 90000;
       }
@@ -50,19 +55,66 @@
         return JSON.parse(t);
       } catch (e) { note(e); }
     }
-    // 공개 프록시 경유 (서버 없이 폰에서 직접)
+    throw firstErr || new Error("야후 직접 조회 실패");
+  }
+  // 공개 프록시 경유 야후 (서버 없이 폰에서 직접)
+  async function fetchPublicJson(url) {
     try {
       const r = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(url));
       const t = await r.text();
-      if (r.ok && t.charAt(0) !== "<") return JSON.parse(t);
-      err = new Error("프록시 경유 실패");
-    } catch (e) { err = e; }
-    // 로컬 프록시 (PC 서버 켜져 있을 때만)
+      if (r.ok && t.charAt(0) !== "<") { netFail = 0; return JSON.parse(t); }
+    } catch (_) {}
     try {
       const r = await fetch("/yahoo-api?url=" + encodeURIComponent(url));
-      if (r.ok) return await r.json();
+      if (r.ok) { netFail = 0; return await r.json(); }
     } catch (_) {}
-    throw firstErr || err || new Error("야후 조회 실패");
+    throw new Error("프록시 경유 실패");
+  }
+  async function fetchYahooJson(url) {
+    // 1) 직접 → 2) 자체 중계(엣지 캐시) → 3) 공개 프록시 → 4) 로컬 프록시
+    try { return await fetchDirectJson(url); }
+    catch (firstErr) {
+      const px = relay();
+      if (px) {
+        try {
+          const r = await fetch(px + "/yahoo?url=" + encodeURIComponent(url));
+          const t = await r.text();
+          if (r.ok && t.charAt(0) !== "<") { netFail = 0; return JSON.parse(t); }
+        } catch (_) {}
+      }
+      try { return await fetchPublicJson(url); }
+      catch (_) { throw firstErr; }
+    }
+  }
+  // 네이버 분봉/일봉 (중계 서버 경유 — 브라우저 CORS 직접 호출 불가)
+  function parseNaver(text, tfSec) {
+    const rows = [...String(text).matchAll(/\["(\d{8,12})",\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,\]]+)/g)];
+    const bars = [];
+    for (const m of rows) {
+      const dt = m[1], c = parseFloat(m[5]);
+      if (!isFinite(c)) continue;
+      const num = v => (v === "null" || !isFinite(parseFloat(v)) ? c : parseFloat(v));
+      let t;
+      if (dt.length === 12) t = Math.floor(new Date(`${dt.slice(0, 4)}-${dt.slice(4, 6)}-${dt.slice(6, 8)}T${dt.slice(8, 10)}:${dt.slice(10, 12)}:00+09:00`).getTime() / 1000);
+      else t = Math.floor(new Date(`${dt.slice(0, 4)}-${dt.slice(4, 6)}-${dt.slice(6, 8)}T00:00:00+09:00`).getTime() / 1000);
+      if (!t) continue;
+      bars.push({ time: t, open: num(m[2]), high: num(m[3]), low: num(m[4]), close: c, volume: parseInt(m[6], 10) || 0 });
+    }
+    bars.sort((a, b) => a.time - b.time);
+    if (tfSec <= 60) return bars; // 1분봉 그대로
+    return resample(bars, tfSec);
+  }
+  async function fetchNaverViaRelay(symbol, tfKey, tf) {
+    const px = relay();
+    if (!px || !/^\d{6}$/.test(String(symbol).trim())) throw new Error("중계 서버 미설정");
+    const isDay = tfKey === "1D";
+    const r = await fetch(`${px}/naver?symbol=${symbol.trim()}&timeframe=${isDay ? "day" : "minute"}&count=${isDay ? 800 : 3000}`);
+    const t = await r.text();
+    if (!r.ok || !t || t.charAt(0) === "<") throw new Error("중계 네이버 실패");
+    const bars = parseNaver(t, tf.sec);
+    if (bars.length < 5) throw new Error("네이버 봉 부족");
+    netFail = 0;
+    return bars.slice(-400);
   }
 
   function resample(bars, sec) {
@@ -119,6 +171,10 @@
         lastErr = new Error(yh + "/" + tfKey + ": 봉 부족");
       } catch (e) { if (!firstErr) firstErr = e; lastErr = e; }
     }
+    // 한국 종목: 중계 서버 경유 네이버 분봉/일봉 (야후 전부 실패 시)
+    try {
+      return await fetchNaverViaRelay(symbol, tfKey, tf);
+    } catch (e) { if (!firstErr) firstErr = e; }
     throw firstErr || lastErr || new Error(symbol + "/" + tfKey + ": 데이터 없음");
   }
 
@@ -195,6 +251,7 @@
     }
     stopPolling() { if (this._timer) clearInterval(this._timer); this._timer = null; }
   }
+  Feed.proxyUrl = "";
   Feed.resolved = {};
   try { Feed.resolved = JSON.parse(localStorage.getItem("a30_yh") || "{}"); } catch (_) {}
   setInterval(() => { try { localStorage.setItem("a30_yh", JSON.stringify(Feed.resolved)); } catch (_) {} }, 10000);

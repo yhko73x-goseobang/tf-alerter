@@ -151,17 +151,20 @@
   cv.addEventListener("pointerdown", e => { dragX = e.clientX; dragOff = offset; cv.setPointerCapture(e.pointerId); });
   cv.addEventListener("pointermove", e => {
     if (dragX == null) return;
-    offset = Math.max(0, Math.round(dragOff + (dragX - e.clientX) / perRow));
+    // 손가락을 따라 차트가 같이 밀리도록 (오른쪽으로 밀면 과거로)
+    offset = Math.max(0, Math.round(dragOff + (e.clientX - dragX) / perRow));
     follow = false; $("btnFollow").classList.remove("active");
     draw();
   });
   cv.addEventListener("pointerup", () => { dragX = null; });
   cv.addEventListener("wheel", e => { e.preventDefault(); perRow = Math.min(40, Math.max(4, perRow * (e.deltaY > 0 ? 1.1 : 0.9))); draw(); }, { passive: false });
+  cv.addEventListener("touchstart", e => { if (e.touches.length === 2) { dragX = null; pinchD = 0; } }, { passive: true });
   cv.addEventListener("touchmove", e => {
     if (e.touches.length === 2) {
       e.preventDefault();
       const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-      if (pinchD) perRow = Math.min(40, Math.max(4, pinchPR * pinchD / d));
+      // 벌리면 확대(봉이 굵어짐), 오므리면 축소
+      if (pinchD) perRow = Math.min(40, Math.max(4, pinchPR * d / pinchD));
       else { pinchD = d; pinchPR = perRow; }
       draw();
     }
@@ -184,9 +187,11 @@
     let hi = -Infinity, lo = Infinity, vmax = 1;
     view.forEach(b => { hi = Math.max(hi, b.high); lo = Math.min(lo, b.low); vmax = Math.max(vmax, b.volume); });
     const pad = (hi - lo) * 0.08 || 1; hi += pad; lo -= pad;
-    const volH = H * 0.16, priceH = H - volH - 8 * dpr;
+    const axisH = 20 * dpr, axisW = 58 * dpr, bodyH = H - axisH, plotW = W - axisW;
+    const volH = bodyH * 0.16, priceH = bodyH - volH - 8 * dpr;
     const y = p => priceH - (p - lo) / (hi - lo) * priceH;
-    const stepX = W / view.length;
+    const baseY = bodyH; // 거래량 바닥 = 시간축 위
+    const stepX = plotW / view.length;
     const p = params();
 
     ctx.strokeStyle = "#1e2a44"; ctx.lineWidth = 1;
@@ -203,7 +208,7 @@
       if ($("tglVol").checked) {
         const vh = (b.volume / vmax) * volH;
         ctx.globalAlpha = 0.55;
-        ctx.fillRect(x - bw / 2, H - vh, bw, vh);
+        ctx.fillRect(x - bw / 2, baseY - vh, bw, vh);
         ctx.globalAlpha = 1;
       }
     });
@@ -226,12 +231,60 @@
       if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", [5 * dpr, 4 * dpr]); line(ind.pc.dn, "#ffb300", [5 * dpr, 4 * dpr]); }
     }
     const last = bars[bars.length - 1];
-    ctx.strokeStyle = last.close >= last.open ? "#26a69a" : "#ef5350";
+    const upLast = last.close >= last.open;
+    ctx.strokeStyle = upLast ? "#26a69a" : "#ef5350";
     ctx.setLineDash([4 * dpr, 3 * dpr]);
-    ctx.beginPath(); ctx.moveTo(0, y(last.close)); ctx.lineTo(W, y(last.close)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y(last.close)); ctx.lineTo(plotW, y(last.close)); ctx.stroke();
     ctx.setLineDash([]);
+    // 오른쪽 가격축
+    ctx.fillStyle = "#0b1220";
+    ctx.fillRect(plotW, 0, axisW, bodyH);
+    ctx.strokeStyle = "#1e2a44"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(plotW, 0); ctx.lineTo(plotW, bodyH); ctx.stroke();
+    ctx.font = `${10 * dpr}px sans-serif`; ctx.textAlign = "left";
+    for (let g = 0; g <= 4; g++) {
+      const pv = hi - (hi - lo) * g / 4, yy = y(pv);
+      if (yy < 0 || yy > bodyH) continue;
+      ctx.fillStyle = "#7d8aa3";
+      ctx.fillText(fmtPx(pv), plotW + 5 * dpr, yy + 3.5 * dpr);
+    }
+    // 마지막가 태그
+    const ly = Math.min(Math.max(y(last.close), 9 * dpr), bodyH - 9 * dpr);
+    ctx.fillStyle = upLast ? "#26a69a" : "#ef5350";
+    const tag = fmtPx(last.close);
+    const tw = ctx.measureText(tag).width + 10 * dpr;
+    ctx.fillRect(W - tw, ly - 9 * dpr, tw, 18 * dpr);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(tag, W - tw + 5 * dpr, ly + 3.5 * dpr);
     ctx.fillStyle = "#d5dce8"; ctx.font = `${11 * dpr}px sans-serif`;
     ctx.fillText(fmtT(last.time) + " " + tf + " · 야후", 8 * dpr, 14 * dpr);
+    // 하단 시간축 (날짜·시간)
+    ctx.fillStyle = "#0b1220";
+    ctx.fillRect(0, bodyH, W, axisH);
+    ctx.strokeStyle = "#1e2a44"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, bodyH); ctx.lineTo(W, bodyH); ctx.stroke();
+    ctx.fillStyle = "#7d8aa3"; ctx.font = `${10 * dpr}px sans-serif`; ctx.textAlign = "center";
+    const ticks = Math.max(2, Math.min(5, Math.floor(W / dpr / 90)));
+    for (let k = 1; k <= ticks; k++) {
+      const i = Math.min(view.length - 1, Math.floor(view.length * k / (ticks + 0.5)) - 1);
+      if (i < 0) continue;
+      const x = (i + 0.5) * stepX;
+      ctx.strokeStyle = "#16203a";
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, bodyH); ctx.stroke();
+      ctx.fillText(fmtAxis(view[i].time), Math.min(Math.max(x, 30 * dpr), plotW - 30 * dpr), bodyH + 14 * dpr);
+    }
+    ctx.textAlign = "left";
+  }
+  function fmtPx(v) {
+    if (v >= 1000) return Math.round(v).toLocaleString("ko-KR");
+    if (v >= 10) return v.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+    return String(Math.round(v * 100) / 100);
+  }
+  function fmtAxis(t) {
+    const d = new Date(t * 1000);
+    const md = `${d.getMonth() + 1}/${d.getDate()}`;
+    if (tf === "1D") return md;
+    return `${md} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
   function fmtT(t) {
     const d = new Date(t * 1000);
@@ -414,7 +467,14 @@
     scanTimer = setInterval(() => scanAll(false), Math.max(30, +$("pScanSec").value || 60) * 1000);
   }
 
-  // ---------- 이벤트 ----------
+  // ---------- 중계 서버 URL ----------
+  try { $("proxyUrl").value = localStorage.getItem("a30_proxy") || ""; } catch (_) {}
+  function applyProxy() {
+    const v = $("proxyUrl").value.trim().replace(/\/+$/, "");
+    try { localStorage.setItem("a30_proxy", v); } catch (_) {}
+    log(v ? "중계 서버 설정: " + v : "중계 서버 해제 (직접+공개프록시만)");
+  }
+  $("proxyUrl").addEventListener("change", applyProxy);
   document.querySelectorAll("#tfBar button").forEach(b => {
     b.onclick = () => { tf = b.dataset.tf; persistSyms(); renderTFBar(); updateCurSym(); loadChart(); restartPolling(); };
   });

@@ -97,8 +97,11 @@
   <!-- 종목 페이지 -->
   <section class="page" id="page-syms">
     <div class="card">
-      <h3>📡 야후 30분봉 피드 (키/PC 불필요)</h3>
+      <h3>📡 데이터 피드 (야후 직접 → 중계 → 공개프록시)</h3>
       <div class="kw-status" id="yahooStatus">대기 — 종목 추가 후 스캔 시작</div>
+      <label>중계 서버 URL (선택, Cloudflare Worker)
+        <input id="proxyUrl" type="text" placeholder="https://xxx.workers.dev (없으면 비워두기)" autocomplete="off" />
+      </label>
       <div class="row">
         <label>폴링 간격
           <select id="pollSec">
@@ -110,7 +113,7 @@
         </label>
         <button id="btnPollNow">🔄 지금 받기</button>
       </div>
-      <p class="hint">6자리 번호는 <code>.KS → .KQ</code> 자동 판별. 차트 시간대 전환해도 감시는 체크된 시간대 전부 돎. 4h는 60m봉 합성, 1D는 일봉. 지연 있어도 완성봉 기준이라 상관없음.</p>
+      <p class="hint">6자리 번호는 <code>.KS → .KQ</code> 자동 판별. 중계 서버가 있으면 한국 종목은 네이버 분봉/일봉도 자동 사용. 시간대 전환해도 감시는 체크된 시간대 전부 돎.</p>
     </div>
     <div class="card">
       <h3>📋 종목 (터치 → 차트)</h3>
