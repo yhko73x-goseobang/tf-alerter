@@ -18,6 +18,11 @@ body { padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom)); }
 .tfbar { display:flex; gap:6px; margin-bottom:4px; }
 .tfbar button { flex:1; min-height:34px; background:#1b2740; color:var(--mut); border:1px solid var(--grid); border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; padding:4px 6px; }
 .tfbar button.active { background:#123a6d; color:#fff; border-color:var(--acc); }
+.tfbar button[data-tf="15m"].active { border-color:#4db6ac; color:#4db6ac; background:#4db6ac22; }
+.tfbar button[data-tf="30m"].active { border-color:#5c9dff; color:#5c9dff; background:#5c9dff22; }
+.tfbar button[data-tf="1h"].active { border-color:#ffb300; color:#ffb300; background:#ffb30022; }
+.tfbar button[data-tf="4h"].active { border-color:#ab47bc; color:#ab47bc; background:#ab47bc22; }
+.tfbar button[data-tf="1D"].active { border-color:#ff7043; color:#ff7043; background:#ff704322; }
 .up { color:var(--up); } .down { color:var(--down); }
 .canvas-wrap { position:relative; height:52vh; min-height:320px; background:#0b1220; border:1px solid var(--grid); border-radius:12px; overflow:hidden; touch-action:none; }
 .resizer { height:16px; cursor:ns-resize; touch-action:none; position:relative; }
