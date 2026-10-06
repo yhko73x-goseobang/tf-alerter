@@ -320,8 +320,8 @@
           ctx.fillText(tx, plotW - tw + 2 * dpr, ty + 3.5 * dpr);
         });
       }
-      if ($("tglBB").checked) { line(ind.bb.up, "#5c9dff"); line(ind.bb.dn, "#5c9dff"); }
-      if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", [5 * dpr, 4 * dpr], 3); line(ind.pc.dn, "#ffb300", [5 * dpr, 4 * dpr], 3); }
+      if ($("tglBB").checked) { line(ind.bb.up, "#ffffff", null, 2); line(ind.bb.dn, "#ffffff", null, 2); }
+      if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", null, 3); line(ind.pc.dn, "#ffb300", null, 3); }
       if ($("tglVol").checked) {
         // 거래량 20 이평 (고정)
         const vma20 = Indicators.sma(bars.map(b => b.volume), 20);
