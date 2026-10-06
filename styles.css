@@ -1,7 +1,7 @@
 :root { --bg:#0d1421; --panel:#131c2e; --card:#101829; --grid:#1e2a44; --up:#26a69a; --down:#ef5350; --txt:#d5dce8; --mut:#7d8aa3; --acc:#2962ff; --tab-h:64px; }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html,body { margin:0; padding:0; background:var(--bg); color:var(--txt); font-family:"Pretendard",system-ui,-apple-system,sans-serif; font-size:15px; }
-body { padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom)); }
+body { padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom)); display:flex; flex-direction:column; min-height:100dvh; }
 .appbar { position:sticky; top:0; z-index:10; background:var(--panel); border-bottom:1px solid var(--grid); padding:10px 14px calc(10px); padding-top:calc(10px + env(safe-area-inset-top)); }
 .appbar.one-line { display:flex; align-items:center; gap:6px; padding:8px 10px; padding-top:calc(8px + env(safe-area-inset-top)); }
 .appbar.one-line strong { font-size:14px; white-space:nowrap; }
@@ -12,8 +12,11 @@ body { padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom)); }
 .dot.online { background:var(--up); box-shadow:0 0 8px var(--up); }
 .dot.sim { background:#ffb300; } .dot.offline { background:var(--down); }
 .cur-sym { margin:0; flex:1; min-width:0; font-weight:800; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.pages { padding:10px 10px 16px; max-width:720px; margin:0 auto; }
-.page { display:none; } .page.active { display:block; }
+.pages { padding:10px 10px 16px; max-width:720px; margin:0 auto; width:100%; flex:1; display:flex; flex-direction:column; }
+.page { display:none; width:100%; } .page.active { display:block; }
+#page-chart.active { display:flex; flex-direction:column; flex:1; min-height:0; }
+#page-chart.active > * { flex:none; }
+#page-chart.active .sym-strip { flex:1 1 auto; min-height:220px; max-height:none; }
 .ohlc { font-size:13px; margin:2px 2px 6px; font-variant-numeric:tabular-nums; }
 .tfbar { display:flex; gap:6px; margin-bottom:4px; }
 .tfbar button { flex:1; min-height:28px; background:#1b2740; color:var(--mut); border:1px solid var(--grid); border-radius:7px; font-size:12px; font-weight:700; cursor:pointer; padding:2px 4px; }
