@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const feed = new Feed30m.Feed30m();
   const TFS = Feed30m.TFS;
-  const TF_LABEL = { "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
+  const TF_LABEL = { "15m": "15분", "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
 
   // 첨부 관심종목.txt 기본 탑재 (첫 실행 시 자동 등록)
   const DEFAULT_SYMS = [
@@ -113,6 +113,7 @@
   }
   function watchTFs() {
     const out = [];
+    if ($("w15m").checked) out.push("15m");
     if ($("w30m").checked) out.push("30m");
     if ($("w1h").checked) out.push("1h");
     if ($("w4h").checked) out.push("4h");
@@ -131,7 +132,7 @@
     $("cMA200").checked = p.cma !== false; $("cVol").checked = p.cvol === true;
     if (p.scan) $("pScanSec").value = p.scan;
     if (p.poll) $("pollSec").value = p.poll;
-    if (p.w) { $("w30m").checked = p.w.includes("30m"); $("w1h").checked = p.w.includes("1h"); $("w4h").checked = p.w.includes("4h"); $("w1D").checked = p.w.includes("1D"); }
+    if (p.w) { $("w15m").checked = p.w.includes("15m"); $("w30m").checked = p.w.includes("30m"); $("w1h").checked = p.w.includes("1h"); $("w4h").checked = p.w.includes("4h"); $("w1D").checked = p.w.includes("1D"); }
   }
 
   // ---------- 차트 (Canvas, 터치 팬/줌) ----------
@@ -148,7 +149,8 @@
   window.addEventListener("resize", resize);
 
   let dragX = null, dragOff = 0, pinchD = 0, pinchPR = 0;
-  cv.addEventListener("pointerdown", e => { dragX = e.clientX; dragOff = offset; cv.setPointerCapture(e.pointerId); });
+  let downT = 0, downX = 0, downY = 0, flingOff = false;
+  cv.addEventListener("pointerdown", e => { dragX = e.clientX; dragOff = offset; downT = Date.now(); downX = e.clientX; downY = e.clientY; flingOff = false; cv.setPointerCapture(e.pointerId); });
   cv.addEventListener("pointermove", e => {
     if (dragX == null) return;
     // 손가락을 따라 차트가 같이 밀리도록 (오른쪽으로 밀면 과거로)
@@ -156,9 +158,21 @@
     follow = false; $("btnFollow").classList.remove("active");
     draw();
   });
-  cv.addEventListener("pointerup", () => { dragX = null; });
+  cv.addEventListener("pointerup", e => {
+    dragX = null;
+    // 빠른 좌우 플릭이면 관심종목 이전/다음으로 전환 (천천히 밀면 팬 유지)
+    if (!flingOff) {
+      const dt = Date.now() - downT, dx = e.clientX - downX, dy = e.clientY - downY;
+      if (dt < 350 && Math.abs(dx) > 70 && Math.abs(dy) < 50 && feed.symbols.length > 1) {
+        const i = feed.symbols.findIndex(s => s.id === symbol);
+        const n = feed.symbols.length;
+        const next = feed.symbols[(i + (dx < 0 ? 1 : n - 1)) % n];
+        if (next && next.id !== symbol) selectSymbol(next.id);
+      }
+    }
+  });
   cv.addEventListener("wheel", e => { e.preventDefault(); perRow = Math.min(40, Math.max(4, perRow * (e.deltaY > 0 ? 1.1 : 0.9))); draw(); }, { passive: false });
-  cv.addEventListener("touchstart", e => { if (e.touches.length === 2) { dragX = null; pinchD = 0; } }, { passive: true });
+  cv.addEventListener("touchstart", e => { if (e.touches.length === 2) { dragX = null; pinchD = 0; flingOff = true; } }, { passive: true });
   cv.addEventListener("touchmove", e => {
     if (e.touches.length === 2) {
       e.preventDefault();
@@ -214,8 +228,8 @@
     });
 
     const gi = end - view.length;
-    function line(arr, color, dash) {
-      ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, 1.2 * dpr); ctx.setLineDash(dash || []);
+    function line(arr, color, dash, wMul) {
+      ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, 1.2 * dpr) * (wMul || 1); ctx.setLineDash(dash || []);
       ctx.beginPath(); let started = false;
       view.forEach((_, i) => {
         const v = arr[gi + i];
@@ -226,9 +240,40 @@
       ctx.stroke(); ctx.setLineDash([]);
     }
     if (ind) {
-      if ($("tglMA").checked) p.maLengths.forEach((len, k) => line(ind.mas[len] || [], MA_COLORS[k % MA_COLORS.length]));
+      if ($("tglMA").checked) {
+        p.maLengths.forEach((len, k) => line(ind.mas[len] || [], MA_COLORS[k % MA_COLORS.length]));
+        // 100/200 라벨 (선 오른쪽 끝)
+        ctx.font = `bold ${10 * dpr}px sans-serif`;
+        p.maLengths.forEach((len, k) => {
+          if (len !== 100 && len !== 200) return;
+          const arr = ind.mas[len] || [];
+          let li = Math.min(arr.length - 1, gi + view.length - 1);
+          while (li >= gi && arr[li] == null) li--;
+          if (li < gi) return;
+          const tx = String(len), col = MA_COLORS[k % MA_COLORS.length];
+          const tw = ctx.measureText(tx).width + 8 * dpr;
+          const ty = Math.min(Math.max(y(arr[li]), 9 * dpr), priceH - 4 * dpr);
+          ctx.fillStyle = "#0b1220cc";
+          ctx.fillRect(plotW - tw - 2 * dpr, ty - 9 * dpr, tw, 18 * dpr);
+          ctx.fillStyle = col;
+          ctx.fillText(tx, plotW - tw + 2 * dpr, ty + 3.5 * dpr);
+        });
+      }
       if ($("tglBB").checked) { line(ind.bb.up, "#5c9dff"); line(ind.bb.dn, "#5c9dff"); }
-      if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", [5 * dpr, 4 * dpr]); line(ind.pc.dn, "#ffb300", [5 * dpr, 4 * dpr]); }
+      if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", [5 * dpr, 4 * dpr], 3); line(ind.pc.dn, "#ffb300", [5 * dpr, 4 * dpr], 3); }
+      if ($("tglVol").checked) {
+        // 거래량 20 이평 (고정)
+        const vma20 = Indicators.sma(bars.map(b => b.volume), 20);
+        ctx.strokeStyle = "#e0e0e0"; ctx.lineWidth = Math.max(1, 1 * dpr);
+        ctx.beginPath(); let started = false;
+        view.forEach((_, i) => {
+          const v = vma20[gi + i];
+          if (v == null) { started = false; return; }
+          const x = (i + 0.5) * stepX, yy = baseY - (v / vmax) * volH;
+          if (!started) { ctx.moveTo(x, yy); started = true; } else ctx.lineTo(x, yy);
+        });
+        ctx.stroke();
+      }
     }
     const last = bars[bars.length - 1];
     const upLast = last.close >= last.open;
@@ -298,11 +343,23 @@
     d.className = "alert-item " + (kind || "");
     d.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
     el.prepend(d);
+    el.scrollTop = 0; // 새 기록이 바로 보이게 맨 위로
     while (el.children.length > 60) el.lastChild.remove();
     const badge = $("alertBadge");
     badge.hidden = false;
     badge.textContent = Math.min(99, el.children.length);
   }
+  function showToast(symId, tfKey, hit) {
+    const t = $("alertToast");
+    t.innerHTML = `🔔 [${tfKey}] ${symId} · ${hit.label}<small>터치하면 달성 기록으로 이동</small>`;
+    t.hidden = false;
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => (t.hidden = true), 6000);
+  }
+  $("alertToast").onclick = () => {
+    $("alertToast").hidden = true;
+    document.querySelector('[data-page="page-alert"]').click();
+  };
   function fire(symId, tfKey, barTime, hit, isLive) {
     const key = `${symId}@${tfKey}@${barTime}@${hit.type}`;
     if (fired.has(key)) return;
@@ -311,6 +368,7 @@
     notify(`[${tfKey}] ${symId} ${hit.type}`, hit.label);
     alertLog(`[${tfKey}] ${symId} · ${hit.label}${isLive ? " (진행봉)" : " (완성봉)"}`, hit.type);
     renderWatchlistBadge(symId);
+    showToast(symId, tfKey, hit);
     if (symId === symbol && tfKey === tf) {
       const f = $("alertFlash");
       f.hidden = false;
@@ -387,7 +445,28 @@
     document.querySelectorAll("#tfBar button").forEach(b => b.classList.toggle("active", b.dataset.tf === tf));
   }
 
-  // ---------- 관심종목 ----------
+  // ---------- 차트 하단 종목 스트립 ----------
+  let stripX = 0, stripMoved = false;
+  function renderStrip() {
+    const el = $("symStrip");
+    el.innerHTML = "";
+    feed.symbols.forEach(s => {
+      const b = document.createElement("button");
+      b.textContent = (s.name && s.name !== s.id) ? `${s.id} ${s.name}` : s.id;
+      b.title = s.id;
+      if (s.id === symbol) b.classList.add("active");
+      b.onclick = () => selectSymbol(s.id);
+      el.appendChild(b);
+      if (s.id === symbol) setTimeout(() => b.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }), 50);
+    });
+  }
+  // 스트립을 밀어서 스크롤했으면 클릭(차트 전환) 무시
+  (function () {
+    const el = $("symStrip");
+    el.addEventListener("touchstart", e => { stripX = e.touches[0].clientX; stripMoved = false; }, { passive: true });
+    el.addEventListener("touchmove", e => { if (Math.abs(e.touches[0].clientX - stripX) > 12) stripMoved = true; }, { passive: true });
+    el.addEventListener("click", e => { if (stripMoved) { e.stopPropagation(); e.preventDefault(); stripMoved = false; } }, true);
+  })();
   const rows = {};
   function renderWatchlist() {
     const wl = $("watchlist");
@@ -410,6 +489,7 @@
       d.onclick = () => selectSymbol(s.id);
       wl.appendChild(d); rows[s.id] = d;
     });
+    renderStrip();
   }
   function renderWatchlistBadge(symId) {
     const el = rows[symId];
@@ -480,7 +560,7 @@
   });
   ["tglMA", "tglBB", "tglPC", "tglVol"].forEach(id => $(id).onchange = draw);
   $("btnFollow").onclick = () => { follow = true; offset = 0; $("btnFollow").classList.add("active"); draw(); };
-  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
+  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
     $(id).onchange = () => {
       persistParams(); restartScanTimer(); restartPolling();
       if (bars.length) { ind = Indicators.computeAll(bars, params()); checkBars(symbol, tf, bars, false); draw(); }

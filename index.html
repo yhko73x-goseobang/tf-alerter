@@ -8,14 +8,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="manifest" href="manifest.webmanifest" />
-<title>멀티TF 알리미 — 30m·1h·4h·1D 조건 달성</title>
+<title>국내 상장 관심종목 멀티TF 알리미 — 30m·1h·4h·1D 조건 달성</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <header class="appbar">
   <div class="appbar-top">
-    <strong>⏰ 멀티TF 알리미</strong>
-    <span class="badge-30m">30m·1h·4h·1D</span>
+    <strong>⏰ 국내 상장 관심종목 멀티TF 알리미</strong>
+    <span class="badge-30m">15m·30m·1h·4h·1D</span>
     <span class="conn"><span id="connDot" class="dot sim"></span><span id="connText">시뮬</span></span>
   </div>
   <div class="cur-sym" id="curSym">—</div>
@@ -24,7 +24,9 @@
 <main class="pages">
   <!-- 차트 페이지 -->
   <section class="page active" id="page-chart">
+    <div class="toast" id="alertToast" hidden></div>
     <div class="tfbar" id="tfBar">
+      <button data-tf="15m">15분</button>
       <button data-tf="30m" class="active">30분</button>
       <button data-tf="1h">1시간</button>
       <button data-tf="4h">4시간</button>
@@ -36,20 +38,29 @@
       <div class="alert-flash" id="alertFlash" hidden></div>
     </div>
     <div class="ind-toggles">
-      <label><input type="checkbox" id="tglMA" checked /> MA</label>
-      <label><input type="checkbox" id="tglBB" checked /> BB</label>
-      <label><input type="checkbox" id="tglPC" checked /> PC</label>
-      <label><input type="checkbox" id="tglVol" checked /> 거래량</label>
+      <label><input type="checkbox" id="tglMA" checked /> MA200</label>
+      <label><input type="checkbox" id="tglBB" checked /> BB하단</label>
+      <label><input type="checkbox" id="tglPC" checked /> PC하단</label>
+      <label><input type="checkbox" id="tglVol" checked /> 거래량증가</label>
       <button id="btnFollow" class="active">▶ 추적</button>
     </div>
     <div class="statusline"><span id="feedInfo">30m · 대기</span><span id="priceInfo">—</span></div>
+    <div class="sym-strip" id="symStrip"></div>
   </section>
 
   <!-- 알리미 페이지 -->
   <section class="page" id="page-alert">
     <div class="card">
+      <h3>📝 달성 기록 <span class="mut" id="scanInfo">대기</span></h3>
+      <div class="alert-log" id="alertLog"></div>
+      <div class="row">
+        <button id="btnClearAlerts">기록지우기</button>
+      </div>
+    </div>
+    <div class="card">
       <h3>🔔 조건 (ON/OFF) + 감시 시간대</h3>
       <div class="row" id="tfWatch">
+        <label class="switch"><input type="checkbox" id="w15m" checked /> 15분</label>
         <label class="switch"><input type="checkbox" id="w30m" checked /> 30분</label>
         <label class="switch"><input type="checkbox" id="w1h" checked /> 1시간</label>
         <label class="switch"><input type="checkbox" id="w4h" checked /> 4시간</label>
@@ -85,12 +96,7 @@
       <div class="row">
         <button id="btnTestSound">🔊 테스트음</button>
         <button id="btnScanNow">🔍 지금 스캔</button>
-        <button id="btnClearAlerts">기록지우기</button>
       </div>
-    </div>
-    <div class="card">
-      <h3>📝 달성 기록 <span class="mut" id="scanInfo">대기</span></h3>
-      <div class="alert-log" id="alertLog"></div>
     </div>
   </section>
 

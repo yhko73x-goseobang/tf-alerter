@@ -1,6 +1,6 @@
 {
-  "name": "30분봉 알리미",
-  "short_name": "30m알리미",
+  "name": "국내 상장 관심종목 멀티TF 알리미",
+  "short_name": "관심종목알리미",
   "display": "standalone",
   "background_color": "#0d1421",
   "theme_color": "#0d1421",
