@@ -95,8 +95,9 @@
     } catch (_) {}
   }
   function playAlert(type) {
-    if ($("pSnd").value === "long") { tone(523, 0.3, 0, 0.22); tone(784, 0.45, 0.28, 0.22); }
-    else { tone(880, 0.14, 0, 0.2); }
+    const mode = $("pSnd").value || "short";
+    if (mode === "long") { tone(523, 0.3, 0, 0.22); tone(784, 0.45, 0.28, 0.22); }
+    else if (mode === "short") { tone(880, 0.14, 0, 0.2); }
     if ($("pVibrate").checked && navigator.vibrate) { try { navigator.vibrate([120]); } catch (_) {} }
   }
   async function notify(title, body) {
