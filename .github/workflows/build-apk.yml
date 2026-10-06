@@ -26,7 +26,7 @@ jobs:
       - name: Install Capacitor
         run: |
           npm init -y
-          npm i @capacitor/core @capacitor/cli @capacitor/android
+          npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
       - name: Sync www
         run: |
           mkdir -p www
