@@ -2,6 +2,9 @@
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html,body { margin:0; padding:0; background:var(--bg); color:var(--txt); font-family:"Pretendard",system-ui,-apple-system,sans-serif; font-size:15px; }
 body { padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom)); display:flex; flex-direction:column; min-height:100dvh; }
+body.lock { height:100dvh; overflow:hidden; }
+body.lock .pages { min-height:0; }
+body.lock #page-chart.active { min-height:0; }
 .appbar { position:sticky; top:0; z-index:10; background:var(--panel); border-bottom:1px solid var(--grid); padding:10px 14px calc(10px); padding-top:calc(10px + env(safe-area-inset-top)); }
 .appbar.one-line { display:flex; align-items:center; gap:6px; padding:8px 10px; padding-top:calc(8px + env(safe-area-inset-top)); }
 .appbar.one-line strong { font-size:14px; white-space:nowrap; }
@@ -30,7 +33,7 @@ body { padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom)); display:
 .tfbar button[data-tf="4h"].active { border-color:#ab47bc; color:#ab47bc; background:#ab47bc22; }
 .tfbar button[data-tf="1D"].active { border-color:#ff7043; color:#ff7043; background:#ff704322; }
 .up { color:var(--up); } .down { color:var(--down); }
-.canvas-wrap { position:relative; height:52vh; min-height:320px; background:#0b1220; border:1px solid var(--grid); border-radius:12px; overflow:hidden; touch-action:none; }
+.canvas-wrap { position:relative; height:52vh; min-height:224px; background:#0b1220; border:1px solid var(--grid); border-radius:12px; overflow:hidden; touch-action:none; }
 .resizer { height:16px; cursor:ns-resize; touch-action:none; position:relative; }
 .resizer::after { content:""; position:absolute; left:50%; top:5px; transform:translateX(-50%); width:64px; height:6px; border-radius:3px; background:var(--grid); }
 canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
@@ -45,13 +48,14 @@ canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
 .ind-body { display:flex; gap:12px; flex-wrap:wrap; padding:8px 10px; font-size:14px; }
 .card button, .file-btn { min-height:44px; background:#1b2740; color:var(--txt); border:1px solid var(--grid); border-radius:10px; padding:8px 14px; font-size:14px; cursor:pointer; }
 .statusline { display:flex; justify-content:space-between; font-size:12px; color:var(--mut); padding:4px 2px; gap:8px; }
-.sym-strip { display:flex; flex-direction:column; gap:4px; overflow-y:auto; max-height:320px; padding:8px 2px 2px; scrollbar-width:thin; }
-.sb-row { display:grid; grid-template-columns:1.5fr repeat(8, 1fr); gap:3px; align-items:stretch; }
-.sb-head span { text-align:center; font-size:11px; font-weight:800; color:var(--mut); padding:2px 0; }
+.sym-strip { display:flex; flex-direction:column; gap:4px; overflow-y:auto; padding:8px 2px 2px; scrollbar-width:thin; scrollbar-gutter:stable; }
+.sym-strip::-webkit-scrollbar, .alert-log::-webkit-scrollbar, .log::-webkit-scrollbar, #watchlist::-webkit-scrollbar { width:6px; height:6px; }
+.sb-row { display:grid; grid-template-columns:minmax(120px, 1.8fr) repeat(8, minmax(0, 0.65fr)); gap:3px; align-items:stretch; }
+.sb-head span { text-align:center; font-size:9px; font-weight:800; color:var(--mut); padding:2px 0; }
 .sb-head span.cur { outline:1px solid #fff; border-radius:4px; }
-.sb-name { background:#0b1220; color:var(--txt); border:1px solid var(--grid); border-radius:8px; min-height:46px; padding:4px 6px; font-size:12px; cursor:pointer; text-align:left; overflow:hidden; }
-.sb-name b { display:block; font-size:12px; }
-.sb-name small { display:block; font-size:10px; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sb-name { background:#0b1220; color:var(--txt); border:1px solid var(--grid); border-radius:8px; min-height:46px; padding:4px 6px; font-size:13px; cursor:pointer; text-align:left; overflow:hidden; }
+.sb-name b { display:block; font-size:13px; }
+.sb-name small { display:block; font-size:12px; color:#9fb0c9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .sb-row.sel .sb-name { border-color:var(--acc); background:#123a6d33; }
 .sb-cell { min-height:46px; border-radius:8px; border:1px solid var(--grid); background:transparent; font-size:15px; font-weight:800; cursor:pointer; }
 .sb-cell:disabled { opacity:0.4; cursor:default; }

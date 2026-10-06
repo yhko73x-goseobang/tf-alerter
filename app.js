@@ -70,11 +70,13 @@
   // ---------- 탭 ----------
   document.querySelectorAll(".tabbar button").forEach(b => {
     b.onclick = () => {
+      document.body.classList.toggle("lock", b.dataset.page === "page-chart");
       document.querySelectorAll(".tabbar button").forEach(x => x.classList.toggle("active", x === b));
       document.querySelectorAll(".page").forEach(p => p.classList.toggle("active", p.id === b.dataset.page));
       if (b.dataset.page === "page-chart") draw();
     };
   });
+  document.body.classList.add("lock"); // 시작 페이지는 차트(고정)
 
   // ---------- 사운드/진동/알림 ----------
   let actx = null;
@@ -175,7 +177,7 @@
   let dragX = null, dragOff = 0, pinchD = 0, pinchPR = 0;
   let downT = 0, downX = 0, downY = 0, flingOff = false;
   let hDrag = null; // {startY, startH, dir} 차트 높이 조절 중
-  function chartHMin() { return 180; }
+  function chartHMin() { return 126; }
   function chartHMax() { return Math.round(window.innerHeight * 0.75); }
   function applyChartH(px, save) {
     const wrap = $("chartWrap");
@@ -494,7 +496,9 @@
     const key = `${symId}@${tfKey}@${barTime}@${hit.type}`;
     if (fired.has(key)) return;
     fired.add(key);
-    fires.push({ symId, tfKey, type: hit.type, barTime, wall: Date.now() });
+    const seq = S_load("sigseq", 0) + 1;
+    S_save("sigseq", seq);
+    fires.push({ symId, tfKey, type: hit.type, barTime, wall: Date.now(), seq });
     buyMarks.set(key, { symId, tfKey, barTime, type: hit.type, price });
     if (buyMarks.size > 300) buyMarks.delete(buyMarks.keys().next().value);
     playAlert(hit.type);
@@ -614,12 +618,12 @@
     const now = Date.now();
     while (fires.length && now - fires[0].wall > 48 * 3600000) fires.shift();
     if (fires.length > 3000) fires.splice(0, fires.length - 3000);
-    const cntHour = new Map(), cntWin = new Map(), lastMap = new Map();
+    const cntHour = new Map(), seqWin = new Map(), lastMap = new Map();
     fires.forEach(f => {
       if (now - f.wall < 3600000) cntHour.set(f.symId, (cntHour.get(f.symId) || 0) + 1);
-      if (now - f.wall < tfWindowMs(f.tfKey)) {
+      if (f.seq && now - f.wall < tfWindowMs(f.tfKey)) {
         const k = f.symId + "|" + f.tfKey;
-        cntWin.set(k, (cntWin.get(k) || 0) + 1);
+        if (f.seq > (seqWin.get(k) || 0)) seqWin.set(k, f.seq);
       }
       if (!lastMap.has(f.symId) || lastMap.get(f.symId) < f.wall) lastMap.set(f.symId, f.wall);
     });
@@ -661,13 +665,13 @@
       nm.onclick = () => { tf = "1D"; persistSyms(); renderTFBar(); selectSymbol(id); };
       row.appendChild(nm);
       TF_ORDER.forEach(t => {
-        const n = cntWin.get(id + "|" + t) || 0;
+        const sq = seqWin.get(id + "|" + t) || 0;
         const c = document.createElement("button");
         c.className = "sb-cell";
         c.title = `${id} · ${t} 차트로 이동`;
         c.onclick = () => { tf = t; persistSyms(); renderTFBar(); selectSymbol(id); };
-        if (n > 0) {
-          c.textContent = n > 1 ? n : "○";
+        if (sq > 0) {
+          c.textContent = sq; // 최신 신호일수록 큰 숫자
           c.style.background = TFCOL[t];
           c.style.color = TFTXT[t] || "#fff";
         }
@@ -916,6 +920,11 @@
 
   // ---------- 시작 ----------
   restoreParams(); restoreSyms();
+  if (S_load("paramver", 0) < 2) { // 감시 시간대 기본값: 5분·15분·1일만
+    ["w1m", "w3m", "w5m", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => { $(id).checked = ["w5m", "w15m", "w1D"].includes(id); });
+    persistParams();
+    S_save("paramver", 2);
+  }
   if (S_load("symver", 0) < SYMVER) {
     const n = feed.addSymbols(DEFAULT_SYMS);
     S_save("symver", SYMVER);
