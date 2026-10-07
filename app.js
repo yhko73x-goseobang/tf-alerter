@@ -629,6 +629,7 @@
     persistSyms();
     updateCurSym(); renderWatchlist();
     scrollBoardToCur();
+    restartPolling();
     await loadChart();
   }
   // 신호 온 종목은 신호 난 시간대 차트로 점프
@@ -699,6 +700,7 @@
   const lastHits = new Map(); // id -> {type, tfKey} — 종목명 옆 표시용 최신 신호
   function renderStrip() {
     const el = $("symStrip");
+    const keepScroll = el.scrollTop;
     const now = Date.now();
     while (fires.length && now - fires[0].wall > 48 * 3600000) fires.shift();
     if (fires.length > 3000) fires.splice(0, fires.length - 3000);
@@ -740,6 +742,9 @@
       c.textContent = t;
       c.style.color = TFCOL[t];
       if (t === tf) c.classList.add("cur");
+      const ctr = trendMap.get(symbol + "|" + t) || 0;
+      if (ctr === 1) c.style.border = "2px solid " + ATF_BULL;
+      else if (ctr === -1) c.style.border = "2px solid " + ATF_BEAR;
       hr.appendChild(c);
     });
     el.appendChild(hr);
@@ -773,6 +778,7 @@
       });
       el.appendChild(row);
     });
+    el.scrollTop = keepScroll;
   }
   const rows = {};
   const chg = new Map(); // id -> 전일비 %
@@ -916,6 +922,7 @@
       }
     }
     $("scanInfo").textContent = `마지막 스캔 ${new Date().toLocaleTimeString()} · ${feed.symbols.length}종목 × ${tfs.join(",")} · 완성봉`;
+    renderStrip(); // 추세 테두리·신호 갱신 반영 (순서는 내부 5초 디바운스)
     scanning = false;
   }
   let scanTimer = null;
