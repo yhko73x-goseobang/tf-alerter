@@ -204,7 +204,7 @@
       list.forEach(s0 => {
         let id = String(s0.id).trim().toUpperCase();
         if (!id || this.symbols.some(s => s.id === id)) return;
-        this.symbols.push({ id, name: s0.name || id, alert: s0.alert !== false });
+        this.symbols.push({ id, name: s0.name || id, alert: s0.alert !== false, star: !!s0.star });
         n++;
       });
       return n;

@@ -6,11 +6,11 @@
   const TF_LABEL = { "1m": "1분", "3m": "3분", "5m": "5분", "15m": "15분", "30m": "30분", "1h": "1시간", "4h": "4시간", "1D": "1일" };
 
   // 첨부 관심종목.txt 기본 탑재 (첫 실행·버전업 시 자동 등록, 중복은 첫 이름 유지)
-  const SYMVER = 4;
+  const SYMVER = 5;
   const DEFAULT_SYMS = [
     { id: "KOSPI", name: "KOSPI" }, { id: "KOSPI200", name: "KOSPI200" }, { id: "KOSDAQ", name: "KOSDAQ" },
     { id: "COMP", name: "나스닥 종합" }, { id: "US100", name: "나스닥100" }, { id: "NDX", name: "나스닥100" }, { id: "IXIC", name: "나스닥종합" },
-    { id: "102110", name: "TIGER200" }, { id: "069500", name: "코덱스200" }, { id: "148020", name: "RISE200" },
+    { id: "102110", name: "TIGER200", star: true }, { id: "069500", name: "코덱스200" }, { id: "148020", name: "RISE200" },
     { id: "395270", name: "HANARO Fn-K반도체" }, { id: "396500", name: "TIGER반도체TOP10" },
     { id: "476260", name: "HANARO 반도체핵심공정주도주" }, { id: "471990", name: "KODEX AI반도체핵심장비" },
     { id: "471760", name: "TIGER AI 반도체핵심공정" }, { id: "482030", name: "KoAct 반도체&2차전지핵심소재액티브" },
@@ -94,10 +94,16 @@
       o.start(t); o.stop(t + dur + 0.05);
     } catch (_) {}
   }
-  function playAlert(type) {
+  function playAlert(type, isPriority) {
     const mode = $("pSnd").value || "short";
-    if (mode === "long") { tone(523, 0.3, 0, 0.22); tone(784, 0.45, 0.28, 0.22); }
-    else if (mode === "short") { tone(880, 0.14, 0, 0.2); }
+    if (mode !== "mute") {
+      if (type === "LR") { // 회귀 터치: 강한 울림
+        [660, 880, 1170].forEach((f, k) => tone(f, 0.22, k * 0.24, 0.35));
+      } else if (isPriority) { // 최우선: 부드럽고 긴 벨
+        if ($("pPrio").checked) { tone(740, 1.4, 0, 0.22); tone(740 * 2.4, 0.9, 0, 0.08); }
+      } else if (mode === "long") { tone(523, 0.3, 0, 0.22); tone(784, 0.45, 0.28, 0.22); }
+      else if (mode === "short") { tone(880, 0.14, 0, 0.2); }
+    }
     if ($("pVibrate").checked && navigator.vibrate) { try { navigator.vibrate([120]); } catch (_) {} }
   }
   async function notify(title, body) {
@@ -124,7 +130,7 @@
       maLengths: maLengths.length ? maLengths : [20, 60, 100, 200],
       volN: Math.max(5, Math.min(120, +$("pVolN").value || 20)),
       volK: Math.max(1, Math.min(10, +$("pVolK").value || 2)),
-      enabled: { PC: $("cPC").checked, BB: $("cBB").checked, MA200: $("cMA200").checked, VOL: $("cVol").checked },
+      enabled: { PC: $("cPC").checked, BB: $("cBB").checked, MA200: $("cMA200").checked, VOL: $("cVol").checked, LR: $("cLR").checked },
     };
   }
   function watchTFs() {
@@ -140,7 +146,7 @@
     return out.length ? out : ["30m"];
   }
   function persistParams() {
-    S_save("params", { pc: $("pPCLen").value, bbn: $("pBBN").value, bbk: $("pBBK").value, ma: $("pMA").value, voln: $("pVolN").value, volk: $("pVolK").value, cpc: $("cPC").checked, cbb: $("cBB").checked, cma: $("cMA200").checked, cvol: $("cVol").checked, scan: $("pScanSec").value, poll: $("pollSec").value, w: watchTFs(), snd: $("pSnd").value });
+    S_save("params", { pc: $("pPCLen").value, bbn: $("pBBN").value, bbk: $("pBBK").value, ma: $("pMA").value, voln: $("pVolN").value, volk: $("pVolK").value, cpc: $("cPC").checked, cbb: $("cBB").checked, cma: $("cMA200").checked, cvol: $("cVol").checked, clr: $("cLR").checked, prio: $("pPrio").checked, scan: $("pScanSec").value, poll: $("pollSec").value, w: watchTFs(), snd: $("pSnd").value });
   }
   function restoreParams() {
     const p = S_load("params", null);
@@ -149,6 +155,7 @@
     $("pMA").value = p.ma || "20,60,100,200"; $("pVolN").value = p.voln || 20; $("pVolK").value = p.volk || 2;
     $("cPC").checked = p.cpc !== false; $("cBB").checked = p.cbb !== false;
     $("cMA200").checked = p.cma !== false; $("cVol").checked = p.cvol === true;
+    $("cLR").checked = p.clr !== false; $("pPrio").checked = p.prio !== false;
     if (p.scan) $("pScanSec").value = p.scan;
     if (p.poll) $("pollSec").value = p.poll;
     if (p.snd) $("pSnd").value = p.snd;
@@ -355,6 +362,22 @@
       }
       if ($("tglBB").checked) { line(ind.bb.up, "#ffffff", null, 2); line(ind.bb.dn, "#ffffff", null, 2); }
       if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", null, 3); line(ind.pc.dn, "#ffb300", null, 3); }
+      if ($("tglPC").checked && ind.pc) {
+        // lower_dc 가격 라벨 (우측 끝)
+        const arr = ind.pc.dn;
+        let li = Math.min(arr.length - 1, gi + n - 1);
+        while (li >= gi && arr[li] == null) li--;
+        if (li >= gi) {
+          const tx = fmtPx(arr[li]);
+          ctx.font = `bold ${10 * dpr}px sans-serif`;
+          const tw = ctx.measureText(tx).width + 8 * dpr;
+          const ty = Math.min(Math.max(y(arr[li]), 9 * dpr), priceH - 4 * dpr);
+          ctx.fillStyle = "#0b1220cc";
+          ctx.fillRect(plotW - tw - 2 * dpr, ty - 9 * dpr, tw, 18 * dpr);
+          ctx.fillStyle = "#ffb300";
+          ctx.fillText(tx, plotW - tw + 2 * dpr, ty + 3.5 * dpr);
+        }
+      }
       if ($("tglLR").checked && ind.lr) { line(ind.lr.top, "#ff6d00", null, 2); line(ind.lr.bot, "#ff6d00", null, 2); }
       if ($("tglATF").checked && ind.atfFast) {
         // ATF 추적선 (추세 색) + L/S 신호 라벨
@@ -409,8 +432,8 @@
       const base = m ? ((m.name && m.name !== m.id) ? `${m.id} ${m.name}` : m.id) : symbol;
       if (!base) return;
       const lh = lastHits.get(symbol);
-      const TN = { PC: "PC하단", BB: "BB하단", MA200: "MA200", VOL: "거래량↑" };
-      const TCOL = { PC: "#ffb300", BB: "#5c9dff", MA200: "#ce93d8", VOL: "#4db6ac" };
+      const TN = { PC: "PC하단", BB: "BB하단", MA200: "MA200", VOL: "거래량↑", LR: "회귀터치" };
+      const TCOL = { PC: "#ffb300", BB: "#5c9dff", MA200: "#ce93d8", VOL: "#4db6ac", LR: "#ff6d00" };
       const suffix = lh ? ` · ${TN[lh.type] || lh.type}[${lh.tfKey}]` : "";
       let fs = 13 * dpr, ss = 16 * dpr;
       ctx.font = `${fs}px sans-serif`;
@@ -512,7 +535,7 @@
         bars.forEach((b, bi) => m.set(b.time, bi));
         markIdx = { bars, map: m };
       }
-      const MCOL = { PC: "#b78a00", BB: "#2f6fdd", MA200: "#8e3aa8", VOL: "#1e8e7e" };
+      const MCOL = { PC: "#b78a00", BB: "#2f6fdd", MA200: "#8e3aa8", VOL: "#1e8e7e", LR: "#e65100" };
       ctx.font = `bold ${10 * dpr}px sans-serif`;
       ctx.textAlign = "left";
       buyMarks.forEach(mk => {
@@ -575,6 +598,7 @@
   function fire(symId, tfKey, barTime, hit, isLive, price) {
     const sm = feed.symbols.find(s => s.id === symId);
     if (sm && sm.alert === false) return; // 감시 해제 종목은 얼럿 안 울림
+    const stared = !!(sm && sm.star);
     const key = `${symId}@${tfKey}@${barTime}@${hit.type}`;
     if (fired.has(key)) return;
     fired.add(key);
@@ -584,7 +608,7 @@
     buyMarks.set(key, { symId, tfKey, barTime, type: hit.type, price });
     if (buyMarks.size > 1000) buyMarks.delete(buyMarks.keys().next().value);
     saveSigState();
-    playAlert(hit.type);
+    playAlert(hit.type, stared);
     notify(`[${tfKey}] ${symId} ${hit.type}`, hit.label);
     alertLog(`[${tfKey}] ${symId} · ${hit.label}${isLive ? " (진행봉)" : " (완성봉)"}`, hit.type);
     renderWatchlistBadge(symId);
@@ -698,7 +722,17 @@
     const b = bars[bars.length - 1];
     if (!b) { $("ohlc").textContent = "—"; return; }
     const up = b.close >= b.open;
-    $("ohlc").innerHTML = `${tf} <b class="${up ? "up" : "down"}">${Alerter.fmt(b.close)}</b> O:${Alerter.fmt(b.open)} H:${Alerter.fmt(b.high)} L:${Alerter.fmt(b.low)} V:${Alerter.compact(b.volume)}`;
+    let devTx = "";
+    if (ind && ind.pc) {
+      const arr = ind.pc.dn;
+      let li = arr.length - 1;
+      while (li >= 0 && arr[li] == null) li--;
+      if (li >= 0 && arr[li]) {
+        const dv = (b.close - arr[li]) / arr[li] * 100;
+        devTx = ` <span class="${dv >= 0 ? "up" : "down"}">DC괴리 ${dv >= 0 ? "+" : ""}${dv.toFixed(2)}%</span>`;
+      }
+    }
+    $("ohlc").innerHTML = `${tf} <b class="${up ? "up" : "down"}">${Alerter.fmt(b.close)}</b> O:${Alerter.fmt(b.open)} H:${Alerter.fmt(b.high)} L:${Alerter.fmt(b.low)} V:${Alerter.compact(b.volume)}${devTx}`;
   }
   function updateCurSym() {
     const m = feed.symbols.find(s => s.id === symbol);
@@ -748,7 +782,7 @@
       score: cntHour.get(s.id) || 0,
       last: lastMap.get(s.id) || 0,
     }));
-    info.sort((a, b) => b.score - a.score || b.last - a.last || a.idx - b.idx);
+    info.sort((a, b) => ((b.s.star ? 1 : 0) - (a.s.star ? 1 : 0)) || b.score - a.score || b.last - a.last || a.idx - b.idx);
     const desired = info.map(r => r.s.id);
     if (now - boardOrderTs < 5000 && boardOrder.length) {
       const pos = new Map(boardOrder.map((id, i) => [id, i]));
@@ -841,10 +875,12 @@
     const wl = $("watchlist");
     wl.innerHTML = "";
     for (const k in rows) delete rows[k];
-    feed.symbols.forEach(s => {
+    const ordered = feed.symbols.map((s, i) => ({ s, i }))
+      .sort((a, b) => ((b.s.star ? 1 : 0) - (a.s.star ? 1 : 0)) || (a.i - b.i));
+    ordered.forEach(({ s }) => {
       const d = document.createElement("div");
       d.className = "wl" + (s.id === symbol ? " active" : "");
-      d.innerHTML = `<input class="ack" type="checkbox" title="얼럿 감시" /><span class="nm"><b>${s.id}</b><span>${s.name || ""}</span></span><span class="pr"><b>—</b><i></i></span>`;
+      d.innerHTML = `<input class="ack" type="checkbox" title="얼럿 감시" /><button class="star" title="최우선 종목">★</button><span class="nm"><b>${s.id}</b><span>${s.name || ""}</span></span><span class="pr"><b>—</b><i></i></span>`;
       const ack = d.querySelector(".ack");
       ack.checked = s.alert !== false;
       ack.onclick = e => {
@@ -852,6 +888,16 @@
         s.alert = ack.checked;
         persistSyms();
         log(`${s.id} 얼럿 ${s.alert ? "켜짐" : "꺼짐"}`);
+      };
+      const star = d.querySelector(".star");
+      star.textContent = s.star ? "★" : "☆";
+      star.classList.toggle("on", !!s.star);
+      star.onclick = e => {
+        e.stopPropagation();
+        s.star = !s.star;
+        persistSyms(); renderWatchlist();
+        feed.symbols.forEach(x => paintRow(x.id));
+        log(`${s.id} 최우선 ${s.star ? "지정" : "해제"}`);
       };
       const rm = document.createElement("button");
       rm.className = "rm"; rm.textContent = "✕"; rm.title = "삭제";
@@ -886,7 +932,7 @@
   }
   function restoreSyms() {
     const list = S_load("symbols", null);
-    if (list && list.length) feed.addSymbols(list.map(s => ({ id: s.id, name: s.name, alert: s.alert })));
+    if (list && list.length) feed.addSymbols(list.map(s => ({ id: s.id, name: s.name, alert: s.alert, star: s.star })));
     else { feed.addSymbols(DEFAULT_SYMS); log(`관심종목 ${DEFAULT_SYMS.length}개 자동 등록`); }
     symbol = S_load("current", "") || (feed.symbols[0] && feed.symbols[0].id) || "";
   }
@@ -977,7 +1023,7 @@
     try { localStorage.setItem("a30_indopen", bar.classList.contains("collapsed") ? "0" : "1"); } catch (_) {}
   };
   $("btnFollow").onclick = () => { follow = true; $("btnFollow").classList.add("active"); tweenOffset(0); };
-  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "pSnd", "w1m", "w3m", "w5m", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
+  ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "cLR", "pPrio", "pScanSec", "pollSec", "pSnd", "w1m", "w3m", "w5m", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
     $(id).onchange = () => {
       persistParams(); restartScanTimer(); restartPolling();
       if (bars.length) { ind = Indicators.computeAll(bars, params()); checkBars(symbol, tf, bars, false); draw(); }
@@ -1008,6 +1054,8 @@
     e.target.value = "";
   });
   $("btnSample").onclick = () => { addCodes(DEFAULT_SYMS.map(s => `${s.id} ${s.name}`).join("\n")); };
+  $("btnAlertAll").onclick = () => { feed.symbols.forEach(s => { s.alert = true; }); persistSyms(); renderWatchlist(); log("전체 얼럿 켜짐"); };
+  $("btnAlertNone").onclick = () => { feed.symbols.forEach(s => { s.alert = false; }); persistSyms(); renderWatchlist(); log("전체 얼럿 꺼짐"); };
   $("btnCopyWatch").onclick = async () => {
     const text = feed.symbols.map(s => `${s.id}${s.name && s.name !== s.id ? " " + s.name : ""}`).join("\n");
     try {
@@ -1054,6 +1102,8 @@
   }
   if (S_load("symver", 0) < SYMVER) {
     const n = feed.addSymbols(DEFAULT_SYMS);
+    const m102 = feed.symbols.find(s => s.id === "102110");
+    if (m102 && m102.star == null) m102.star = true; // 최우선 기본값
     S_save("symver", SYMVER);
     persistSyms();
     if (n) log(`새 관심종목 ${n}개 추가 (기존 유지)`);

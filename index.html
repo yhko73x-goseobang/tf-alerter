@@ -78,6 +78,7 @@
       <label class="cond"><input type="checkbox" id="cPC" checked /><span><b>PC 하단 터치</b><small>저가 ≤ 돈치안 하단</small></span></label>
       <label class="cond"><input type="checkbox" id="cBB" checked /><span><b>BB 하단 터치</b><small>저가 ≤ 볼린저 하단</small></span></label>
       <label class="cond"><input type="checkbox" id="cMA200" checked /><span><b>MA200 터치</b><small>봉 안에 MA200 포함</small></span></label>
+      <label class="cond"><input type="checkbox" id="cLR" checked /><span><b>회귀채널 터치</b><small>봉이 상단·하단선에 닿음</small></span></label>
       <label class="cond"><input type="checkbox" id="cVol" /><span><b>거래량 급증</b><small>당봉 ≥ 평균×배수</small></span></label>
     </div>
     <div class="card">
@@ -110,6 +111,7 @@
             <option value="mute">소리 없음</option>
           </select>
         </label>
+        <label class="switch"><input type="checkbox" id="pPrio" checked /> 최우선벨</label>
       </div>
       <div class="row">
         <button id="btnTestSound">🔊 테스트음</button>
@@ -131,6 +133,10 @@
       </div>
       <textarea id="codeBox" rows="2" placeholder="한 줄에 하나 (예: 005930 삼성전자) — 1개면 차트로 점프"></textarea>
       <div class="row"><button id="btnLoadCodes">목록에 추가</button></div>
+      <div class="row">
+        <button id="btnAlertAll">전체켜기</button>
+        <button id="btnAlertNone">전체끄기</button>
+      </div>
       <div id="watchlist"></div>
     </div>
     <div class="card" id="symsSettings">

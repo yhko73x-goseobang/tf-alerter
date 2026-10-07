@@ -26,6 +26,12 @@
       const vma = ind.vma[i];
       if (vma != null && vma > 0 && b.volume >= vma * params.volK) hits.push({ type: "VOL", label: `거래량 급증 (${compact(b.volume)} ≥ 평균×${params.volK})` });
     }
+    // 회귀채널 터치 (상단 or 하단)
+    if (en.LR !== false && ind.lr) {
+      const tp = ind.lr.top[i], bt = ind.lr.bot[i];
+      if (tp != null && b.high >= tp) hits.push({ type: "LR", label: `회귀 상단 터치 (${fmt(b.high)} ≥ ${fmt(tp)})` });
+      else if (bt != null && b.low <= bt) hits.push({ type: "LR", label: `회귀 하단 터치 (${fmt(b.low)} ≤ ${fmt(bt)})` });
+    }
     return hits;
   }
   function fmt(n) {
