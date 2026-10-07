@@ -19,10 +19,10 @@
     const s = String(symbol || "").trim().toUpperCase();
     if (!s) return [];
     if (IDX[s]) return [IDX[s]];
-    if (/^\d{6}$/.test(s)) {
+    if (/^[A-Z0-9]{6}$/.test(s)) {
       const cached = Feed.resolved[s];
       if (cached) return [cached];
-      return [s + ".KS", s + ".KQ"];
+      return [s + ".KS", s + ".KQ"]; // 숫자 6자리 + 영숫자 ETF 코드(0008S0 등)
     }
     if (/^[A-Z.\-^=]+$/.test(s)) return [s];
     const m = s.match(/^(BTC|ETH|SOL|XRP)[\/\-]?(KRW|USD)?$/);
@@ -114,7 +114,7 @@
   }
   async function fetchNaverViaRelay(symbol, tfKey, tf) {
     const px = relay();
-    if (!px || !/^\d{6}$/.test(String(symbol).trim())) throw new Error("중계 서버 미설정");
+    if (!px || !/^[A-Z0-9]{6}$/.test(String(symbol).trim())) throw new Error("중계 서버 미설정");
     const isDay = tfKey === "1D";
     const r = await fetch(`${px}/naver?symbol=${symbol.trim()}&timeframe=${isDay ? "day" : "minute"}&count=${isDay ? 800 : 3000}`);
     const t = await r.text();
@@ -170,10 +170,9 @@
       try {
         const j = await fetchYahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yh)}?interval=${tf.interval}&range=${range}`);
         let bars = barsFromYahoo(j);
-        if (tf.resample) bars = resample(bars, tf.resample);
-        else if (tfKey === "1D") bars = resample(bars, 86400);
+        if (tf.resample) bars = resample(bars, tf.resample); // 3m·4h만 합성 (1D는 야후 일봉 그대로 — DST 병합 방지)
         if (bars.length > 5) {
-          if (/^\d{6}\.(KS|KQ)$/.test(yh)) Feed.resolved[String(symbol).trim().toUpperCase()] = yh;
+          if (/^[A-Z0-9]{6}\.(KS|KQ)$/.test(yh)) Feed.resolved[String(symbol).trim().toUpperCase()] = yh;
           return bars.slice(-400);
         }
         lastErr = new Error(yh + "/" + tfKey + ": 봉 부족");

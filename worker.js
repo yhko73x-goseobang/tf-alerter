@@ -16,7 +16,7 @@ export default {
         const sym = (u.searchParams.get("symbol") || "").replace(/[^0-9A-Za-z]/g, "").slice(0, 10);
         const tf = u.searchParams.get("timeframe") === "day" ? "day" : "minute";
         const count = Math.min(5000, Math.max(1, +u.searchParams.get("count") || 600));
-        if (!/^\d{6}$/.test(sym)) return new Response("bad symbol", { status: 400, headers: cors });
+        if (!/^[A-Z0-9]{6}$/i.test(sym)) return new Response("bad symbol", { status: 400, headers: cors });
         const target = `https://fchart.stock.naver.com/siseJson.nhn?symbol=${sym}&timeframe=${tf}&count=${count}&requestType=0`;
         const r = await fetch(target, { headers: { "User-Agent": "Mozilla/5.0", Referer: "https://finance.naver.com/" } });
         const body = await r.text();

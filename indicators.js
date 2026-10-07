@@ -155,9 +155,8 @@
     const pc = priceChannel(highs, lows, p.pcLen);
     const vma = volMA(vols, p.volN);
     const atfFast = atf(bars, 10, 14, 0.5);
-    const atfSlow = atf(bars, 10, 14, 2.0);
     const lr = linregChannel(closes, 100, 2.0);
-    return { mas, bb, pc, vma, atfFast, atfSlow, lr };
+    return { mas, bb, pc, vma, atfFast, lr };
   }
 
   global.Indicators = { sma, ema, stdev, bollinger, priceChannel, volMA, atf, linregChannel, computeAll };

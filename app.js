@@ -400,6 +400,7 @@
         fs *= k; ss *= k;
       }
       const ty = baseY - volH - 6 * dpr;
+      ctx.font = `${fs}px sans-serif`;
       const bw1 = ctx.measureText(base).width;
       ctx.font = `bold ${ss}px sans-serif`;
       const sw1 = suffix ? ctx.measureText(suffix).width : 0;
