@@ -105,6 +105,39 @@
     return { basis, upper, lower, trend, level, longX, shortX };
   }
 
+  // Linear Regression Channel (Pine 이식: len=100, dev=2.0, 종가 기준)
+  function linregChannel(closes, len, devlen) {
+    len = len || 100; devlen = devlen == null ? 2.0 : devlen;
+    const top = new Array(closes.length).fill(null);
+    const bot = new Array(closes.length).fill(null);
+    const half = Math.floor(len / 2), oddAdj = (1 - len % 2) / 2;
+    for (let i = len - 1; i < closes.length; i++) {
+      let sum = 0, sumI = 0, sumII = 0, sumIV = 0, ok = true;
+      for (let j = 0; j < len; j++) {
+        const v = closes[i - len + 1 + j];
+        if (v == null || !isFinite(v)) { ok = false; break; }
+        sum += v; sumI += j; sumII += j * j; sumIV += j * v;
+      }
+      if (!ok) continue;
+      const denom = len * sumII - sumI * sumI;
+      if (!denom) continue;
+      const slope = (len * sumIV - sumI * sum) / denom;
+      const mid = sum / len;
+      const intercept = mid - slope * half + oddAdj * slope;
+      const endy = intercept + slope * (len - 1);
+      let ds = 0;
+      for (let x = 0; x < len; x++) {
+        const f = slope * (len - x) + intercept;
+        const d = closes[i - x] - f;
+        ds += d * d;
+      }
+      const dev = Math.sqrt(ds / len);
+      top[i] = endy + dev * devlen;
+      bot[i] = endy - dev * devlen;
+    }
+    return { top, bot };
+  }
+
   // bars: [{time,open,high,low,close,volume}] (time=초)
   function computeAll(bars, p) {
     const closes = bars.map(b => b.close);
@@ -118,8 +151,9 @@
     const vma = volMA(vols, p.volN);
     const atfFast = atf(bars, 10, 14, 0.5);
     const atfSlow = atf(bars, 10, 14, 2.0);
-    return { mas, bb, pc, vma, atfFast, atfSlow };
+    const lr = linregChannel(closes, 100, 2.0);
+    return { mas, bb, pc, vma, atfFast, atfSlow, lr };
   }
 
-  global.Indicators = { sma, ema, stdev, bollinger, priceChannel, volMA, atf, computeAll };
+  global.Indicators = { sma, ema, stdev, bollinger, priceChannel, volMA, atf, linregChannel, computeAll };
 })(window);

@@ -332,6 +332,7 @@
       }
       if ($("tglBB").checked) { line(ind.bb.up, "#ffffff", null, 2); line(ind.bb.dn, "#ffffff", null, 2); }
       if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", null, 3); line(ind.pc.dn, "#ffb300", null, 3); }
+      if ($("tglLR").checked && ind.lr) { line(ind.lr.top, "#ff6d00", null, 2); line(ind.lr.bot, "#ff6d00", null, 2); }
       if ($("tglATF").checked && ind.atfFast) {
         // ATF 추적선 (추세 색) + L/S 신호 라벨
         const A = ind.atfFast;
@@ -605,10 +606,16 @@
     if (skipped) log(`형식 오류 ${skipped}줄 건너뜀 (6자리 번호·티커 확인)`);
     return out;
   }
+  // 보고 있는 종목 위치로 보드 자동 스크롤 (스캔 갱신 때는 가만히)
+  function scrollBoardToCur() {
+    const row = document.querySelector(`#symStrip [data-sym="${symbol}"]`);
+    if (row) setTimeout(() => row.scrollIntoView({ block: "nearest", behavior: "smooth" }), 60);
+  }
   async function selectSymbol(id) {
     symbol = id;
     persistSyms();
     updateCurSym(); renderWatchlist();
+    scrollBoardToCur();
     await loadChart();
   }
   // 신호 온 종목은 신호 난 시간대 차트로 점프
@@ -728,6 +735,7 @@
       if (!r) return;
       const row = document.createElement("div");
       row.className = "sb-row" + (id === symbol ? " sel" : "");
+      row.dataset.sym = id;
       const nm = document.createElement("button");
       nm.className = "sb-name";
       nm.innerHTML = `<b>${r.s.id}</b><small>${r.s.name || ""}</small>`;
@@ -915,7 +923,7 @@
   document.querySelectorAll("#tfBar button").forEach(b => {
     b.onclick = () => { tf = b.dataset.tf; persistSyms(); renderTFBar(); updateCurSym(); loadChart(); restartPolling(); };
   });
-  ["tglMA", "tglBB", "tglPC", "tglVol", "tglATF"].forEach(id => $(id).onchange = draw);
+  ["tglMA", "tglBB", "tglPC", "tglVol", "tglATF", "tglLR"].forEach(id => $(id).onchange = draw);
   // ---------- 지표 접기/펼치기 (기본 접힘) ----------
   try { if (localStorage.getItem("a30_indopen") === "1") { $("indBar").classList.remove("collapsed"); $("indArrow").textContent = "▲"; } } catch (_) {}
   $("indHead").onclick = () => {
