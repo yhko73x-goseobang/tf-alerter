@@ -34,6 +34,76 @@
     return { up, mid, dn };
   }
   function volMA(vols, n) { return sma(vols, n); }
+  function ema(values, n) {
+    const out = new Array(values.length).fill(null);
+    const k = 2 / (n + 1);
+    let prev = null;
+    for (let i = 0; i < values.length; i++) {
+      const v = values[i];
+      if (v == null) { out[i] = null; continue; }
+      if (prev == null) {
+        // 시드: 이전 n개 단순평균
+        if (i + 1 < n) { out[i] = null; continue; }
+        let s = 0, ok = true;
+        for (let j = i - n + 1; j <= i; j++) { if (values[j] == null) { ok = false; break; } s += values[j]; }
+        if (!ok) { out[i] = null; continue; }
+        prev = s / n;
+      } else prev = v * k + prev * (1 - k);
+      out[i] = prev;
+    }
+    return out;
+  }
+  function stdev(values, n) {
+    const out = new Array(values.length).fill(null);
+    const m = sma(values, n);
+    for (let i = n - 1; i < values.length; i++) {
+      if (m[i] == null) continue;
+      let s = 0, cnt = 0;
+      for (let j = i - n + 1; j <= i; j++) { if (values[j] == null) continue; s += (values[j] - m[i]) ** 2; cnt++; }
+      out[i] = cnt ? Math.sqrt(s / n) : null;
+    }
+    return out;
+  }
+  // Adaptive Trend Flow (Pine 이식): fast/slow EMA 기준 + 변동성 밴드 추적
+  function atf(bars, len, smoothLen, sens) {
+    len = len || 10; smoothLen = smoothLen || 14; sens = sens == null ? 0.5 : sens;
+    const n = bars.length;
+    const typical = bars.map(b => (b.high + b.low + b.close) / 3);
+    const fastEma = ema(typical, len);
+    const slowEma = ema(typical, len * 2);
+    const vol = stdev(typical, len);
+    const smoothVol = ema(vol, smoothLen);
+    const basis = new Array(n).fill(null), upper = new Array(n).fill(null), lower = new Array(n).fill(null);
+    for (let i = 0; i < n; i++) {
+      if (fastEma[i] == null || slowEma[i] == null || smoothVol[i] == null) continue;
+      basis[i] = (fastEma[i] + slowEma[i]) / 2;
+      upper[i] = basis[i] + smoothVol[i] * sens;
+      lower[i] = basis[i] - smoothVol[i] * sens;
+    }
+    const trend = new Array(n).fill(0), level = new Array(n).fill(null);
+    const longX = new Array(n).fill(false), shortX = new Array(n).fill(false);
+    let prevLevel = null, state = 0, prevCloseLvl = null;
+    for (let i = 0; i < n; i++) {
+      const c = bars[i].close, u = upper[i], l = lower[i], bs = basis[i];
+      if (u == null || l == null || bs == null) continue;
+      if (prevLevel == null) { state = c > bs ? 1 : -1; prevLevel = state === 1 ? l : u; }
+      if (state === 1) {
+        if (c < l) { state = -1; prevLevel = u; }
+        else prevLevel = l;
+      } else {
+        if (c > u) { state = 1; prevLevel = l; }
+        else prevLevel = u;
+      }
+      trend[i] = state; level[i] = prevLevel;
+      if (prevCloseLvl != null) {
+        const pc = bars[i - 1].close;
+        if (pc <= prevCloseLvl && c > prevLevel) longX[i] = true;
+        if (pc >= prevCloseLvl && c < prevLevel) shortX[i] = true;
+      }
+      prevCloseLvl = prevLevel;
+    }
+    return { basis, upper, lower, trend, level, longX, shortX };
+  }
 
   // bars: [{time,open,high,low,close,volume}] (time=초)
   function computeAll(bars, p) {
@@ -46,8 +116,10 @@
     const bb = bollinger(closes, p.bbN, p.bbK);
     const pc = priceChannel(highs, lows, p.pcLen);
     const vma = volMA(vols, p.volN);
-    return { mas, bb, pc, vma };
+    const atfFast = atf(bars, 10, 14, 0.5);
+    const atfSlow = atf(bars, 10, 14, 2.0);
+    return { mas, bb, pc, vma, atfFast, atfSlow };
   }
 
-  global.Indicators = { sma, bollinger, priceChannel, volMA, computeAll };
+  global.Indicators = { sma, ema, stdev, bollinger, priceChannel, volMA, atf, computeAll };
 })(window);

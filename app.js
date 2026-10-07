@@ -240,6 +240,16 @@
   cv.addEventListener("touchend", () => { pinchD = 0; });
 
   const MA_COLORS = ["#ffeb3b", "#ff9800", "#ab47bc", "#42a5f5"];
+  const ATF_BULL = "#00c853", ATF_BEAR = "#f83556";
+  // 완성봉 기준 ATF 추세 (보드 테두리용, 흔들림 방지)
+  function atfTrendOf(allBars, computed) {
+    const tr = (computed && computed.atfFast && computed.atfFast.trend) || [];
+    for (let i = allBars.length - 2; i >= 0; i--) {
+      if (tr[i] === 1 || tr[i] === -1) return tr[i];
+    }
+    return 0;
+  }
+  const trendMap = new Map(); // sym|tf -> 1/-1/0
   function draw() {
     const W = cv.width, H = cv.height;
     ctx.clearRect(0, 0, W, H);
@@ -322,6 +332,37 @@
       }
       if ($("tglBB").checked) { line(ind.bb.up, "#ffffff", null, 2); line(ind.bb.dn, "#ffffff", null, 2); }
       if ($("tglPC").checked) { line(ind.pc.up, "#ffb300", null, 3); line(ind.pc.dn, "#ffb300", null, 3); }
+      if ($("tglATF").checked && ind.atfFast) {
+        // ATF 추적선 (추세 색) + L/S 신호 라벨
+        const A = ind.atfFast;
+        ctx.lineWidth = Math.max(1.5, 2 * dpr);
+        ctx.beginPath(); let st = false, lastTr = 0;
+        for (let i = 0; i < n; i++) {
+          const v = A.level[gi + i];
+          if (v == null) { st = false; continue; }
+          const tr = A.trend[gi + i] || lastTr;
+          ctx.strokeStyle = tr >= 0 ? ATF_BULL : ATF_BEAR;
+          const x = (i + 0.5) * stepX, yy = y(v);
+          if (!st) { ctx.moveTo(x, yy); st = true; } else { ctx.lineTo(x, yy); ctx.strokeStyle = tr >= 0 ? ATF_BULL : ATF_BEAR; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, yy); }
+          lastTr = A.trend[gi + i] || lastTr;
+        }
+        ctx.stroke();
+        ctx.font = `bold ${9 * dpr}px sans-serif`;
+        for (let i = 0; i < n; i++) {
+          const b = slot(i);
+          if (!b) continue;
+          const x = (i + 0.5) * stepX;
+          if (A.longX[gi + i]) {
+            const t = "L", tw = ctx.measureText(t).width + 8 * dpr, yy = y(b.low) + 3 * dpr;
+            ctx.fillStyle = ATF_BULL; ctx.fillRect(x - tw / 2, yy, tw, 13 * dpr);
+            ctx.fillStyle = "#fff"; ctx.fillText(t, x - tw / 2 + 4 * dpr, yy + 10 * dpr);
+          } else if (A.shortX[gi + i]) {
+            const t = "S", tw = ctx.measureText(t).width + 8 * dpr, yy = y(b.high) - 16 * dpr;
+            ctx.fillStyle = ATF_BEAR; ctx.fillRect(x - tw / 2, yy, tw, 13 * dpr);
+            ctx.fillStyle = "#fff"; ctx.fillText(t, x - tw / 2 + 4 * dpr, yy + 10 * dpr);
+          }
+        }
+      }
       if ($("tglVol").checked) {
         // 거래량 20 이평 (고정)
         const vma20 = Indicators.sma(bars.map(b => b.volume), 20);
@@ -398,7 +439,16 @@
     ctx.fillStyle = "#fff";
     ctx.fillText(tag, W - tw + 5 * dpr, ly + 3.5 * dpr);
     ctx.fillStyle = "#d5dce8"; ctx.font = `${11 * dpr}px sans-serif`;
-    ctx.fillText(fmtT(last.time) + " " + tf + " · 야후", 8 * dpr, 14 * dpr);
+    const infoTx = fmtT(last.time) + " " + tf + " · 야후";
+    ctx.fillText(infoTx, 8 * dpr, 14 * dpr);
+    if ($("tglATF").checked && ind && ind.atfFast) {
+      let at = 0;
+      const tr = ind.atfFast.trend;
+      for (let i = tr.length - 1; i >= 0; i--) { if (tr[i] === 1 || tr[i] === -1) { at = tr[i]; break; } }
+      ctx.fillStyle = at > 0 ? ATF_BULL : at < 0 ? ATF_BEAR : "#7d8aa3";
+      ctx.font = `bold ${11 * dpr}px sans-serif`;
+      ctx.fillText("ATF", 8 * dpr + ctx.measureText(infoTx).width + 26 * dpr, 14 * dpr);
+    }
     // 하단 시간축 (날짜·시간)
     ctx.fillStyle = "#0b1220";
     ctx.fillRect(0, bodyH, W, axisH);
@@ -686,10 +736,13 @@
       row.appendChild(nm);
       TF_ORDER.forEach(t => {
         const rk = (rankMap.get(id) || new Map()).get(t) || 0;
+        const tr = trendMap.get(id + "|" + t) || 0;
         const c = document.createElement("button");
         c.className = "sb-cell";
         c.title = `${id} · ${t} 차트로 이동`;
         c.onclick = () => { tf = t; persistSyms(); renderTFBar(); selectSymbol(id); };
+        if (tr === 1) c.style.border = "3px solid " + ATF_BULL;
+        else if (tr === -1) c.style.border = "3px solid " + ATF_BEAR;
         if (rk > 0) {
           c.textContent = rk; // 종목 내 최신 신호 시간대가 1위
           c.style.background = TFCOL[t];
@@ -826,6 +879,7 @@
           // 수동 스캔도 현재 차트만 강제, 나머지는 캐시 존중 (요청 폭증 방지)
           const all = await feed.getBars(s.id, t, manual && s.id === symbol && t === tf);
           const computed = Indicators.computeAll(all, params());
+          trendMap.set(s.id + "|" + t, atfTrendOf(all, computed));
           if (s.id === symbol && t === tf) { bars = all; ind = computed; draw(); updateOHLC(); feed.emitLive(s.id, t); }
           if (t === "1D" && all.length >= 2) {
             const prev = all[all.length - 2].close, last = all[all.length - 1].close;
@@ -861,7 +915,7 @@
   document.querySelectorAll("#tfBar button").forEach(b => {
     b.onclick = () => { tf = b.dataset.tf; persistSyms(); renderTFBar(); updateCurSym(); loadChart(); restartPolling(); };
   });
-  ["tglMA", "tglBB", "tglPC", "tglVol"].forEach(id => $(id).onchange = draw);
+  ["tglMA", "tglBB", "tglPC", "tglVol", "tglATF"].forEach(id => $(id).onchange = draw);
   // ---------- 지표 접기/펼치기 (기본 접힘) ----------
   try { if (localStorage.getItem("a30_indopen") === "1") { $("indBar").classList.remove("collapsed"); $("indArrow").textContent = "▲"; } } catch (_) {}
   $("indHead").onclick = () => {
