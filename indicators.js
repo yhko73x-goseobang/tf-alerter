@@ -82,6 +82,8 @@
     }
     const trend = new Array(n).fill(0), level = new Array(n).fill(null);
     const longX = new Array(n).fill(false), shortX = new Array(n).fill(false);
+    const intensity = new Array(n).fill(0);
+    let run = 0, lastS = 0;
     let prevLevel = null, state = 0, prevCloseLvl = null;
     for (let i = 0; i < n; i++) {
       const c = bars[i].close, u = upper[i], l = lower[i], bs = basis[i];
@@ -95,6 +97,9 @@
         else prevLevel = u;
       }
       trend[i] = state; level[i] = prevLevel;
+      if (state !== lastS) { run = 0; lastS = state; }
+      run = Math.min(run + 1, 20);
+      intensity[i] = run;
       if (prevCloseLvl != null) {
         const pc = bars[i - 1].close;
         if (pc <= prevCloseLvl && c > prevLevel) longX[i] = true;
@@ -102,7 +107,7 @@
       }
       prevCloseLvl = prevLevel;
     }
-    return { basis, upper, lower, trend, level, longX, shortX };
+    return { basis, upper, lower, trend, level, longX, shortX, intensity };
   }
 
   // Linear Regression Channel (Pine 이식: len=100, dev=2.0, 종가 기준)

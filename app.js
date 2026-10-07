@@ -441,6 +441,19 @@
     ctx.fillText(tag, W - tw + 5 * dpr, ly + 3.5 * dpr);
     ctx.fillStyle = "#d5dce8"; ctx.font = `${11 * dpr}px sans-serif`;
     const infoTx = fmtT(last.time) + " " + tf + " · 야후";
+    if ($("tglATF").checked && ind && ind.atfFast) {
+      // ATF 추세 도트 (상단, 추세 지속될수록 진하게)
+      const A = ind.atfFast;
+      const dotY = 7 * dpr, dotR = Math.max(1.5, 2 * dpr);
+      for (let i = 0; i < n; i++) {
+        const tr = A.trend[gi + i];
+        if (tr !== 1 && tr !== -1) continue;
+        const it = Math.min((A.intensity && A.intensity[gi + i]) || 0, 20);
+        const a = (0.25 + 0.15 * (it / 20)).toFixed(3);
+        ctx.fillStyle = tr > 0 ? `rgba(0,200,83,${a})` : `rgba(248,53,86,${a})`;
+        ctx.beginPath(); ctx.arc((i + 0.5) * stepX, dotY, dotR, 0, 6.2832); ctx.fill();
+      }
+    }
     ctx.fillText(infoTx, 8 * dpr, 14 * dpr);
     if ($("tglATF").checked && ind && ind.atfFast) {
       let at = 0;
