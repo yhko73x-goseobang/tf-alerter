@@ -201,6 +201,7 @@
       cv.setPointerCapture(e.pointerId);
       return;
     }
+    cancelTween();
     dragX = e.clientX; dragOff = offset; downT = Date.now(); downX = e.clientX; downY = e.clientY; flingOff = false; cv.setPointerCapture(e.pointerId);
   });
   cv.addEventListener("pointermove", e => {
@@ -209,7 +210,7 @@
     // 손가락을 따라 차트가 같이 밀리도록 (오른쪽으로 밀면 과거로, 왼쪽 한계 -8 미래공간)
     offset = Math.min(bars.length + 7, Math.max(-8, Math.round(dragOff + (e.clientX - dragX) / perRow)));
     follow = false; $("btnFollow").classList.remove("active");
-    draw();
+    requestDraw();
   });
   cv.addEventListener("pointerup", e => {
     hDrag = null;
@@ -225,7 +226,7 @@
       }
     }
   });
-  cv.addEventListener("wheel", e => { e.preventDefault(); perRow = Math.min(40, Math.max(4, perRow * (e.deltaY > 0 ? 1.1 : 0.9))); draw(); }, { passive: false });
+  cv.addEventListener("wheel", e => { e.preventDefault(); perRow = Math.min(40, Math.max(4, perRow * (e.deltaY > 0 ? 1.1 : 0.9))); requestDraw(); }, { passive: false });
   cv.addEventListener("touchstart", e => { if (e.touches.length === 2) { dragX = null; pinchD = 0; flingOff = true; } }, { passive: true });
   cv.addEventListener("touchmove", e => {
     if (e.touches.length === 2) {
@@ -234,13 +235,35 @@
       // 벌리면 확대(봉이 굵어짐), 오므리면 축소
       if (pinchD) perRow = Math.min(40, Math.max(4, pinchPR * d / pinchD));
       else { pinchD = d; pinchPR = perRow; }
-      draw();
+      requestDraw();
     }
   }, { passive: false });
   cv.addEventListener("touchend", () => { pinchD = 0; });
 
   const MA_COLORS = ["#ffeb3b", "#ff9800", "#ab47bc", "#42a5f5"];
   const ATF_BULL = "#00c853", ATF_BEAR = "#f83556";
+  // rAF 렌더 스로틀 + 최단 트윈(150ms) — 왔다갔다 부드럽게
+  let drawQueued = false;
+  function requestDraw() {
+    if (drawQueued) return;
+    drawQueued = true;
+    requestAnimationFrame(() => { drawQueued = false; draw(); });
+  }
+  let animRaf = null, anim = null;
+  function tweenOffset(to, dur) {
+    if (animRaf) cancelAnimationFrame(animRaf);
+    anim = { from: offset, to, t0: performance.now(), dur: dur || 150 };
+    animRaf = requestAnimationFrame(animStep);
+  }
+  function animStep(now) {
+    const k = Math.min(1, (now - anim.t0) / anim.dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    offset = Math.round(anim.from + (anim.to - anim.from) * e);
+    draw();
+    if (k < 1) animRaf = requestAnimationFrame(animStep);
+    else { animRaf = null; anim = null; }
+  }
+  function cancelTween() { if (animRaf) cancelAnimationFrame(animRaf); animRaf = null; anim = null; }
   // 완성봉 기준 ATF 추세 (보드 테두리용, 흔들림 방지)
   function atfTrendOf(allBars, computed) {
     const tr = (computed && computed.atfFast && computed.atfFast.trend) || [];
@@ -664,7 +687,7 @@
     unsub = feed.subscribe(symbol, tf, () => {
       checkBars(symbol, tf, bars, true);
       ind = Indicators.computeAll(bars, params());
-      if (follow) offset = 0;
+      if (follow && offset !== 0) tweenOffset(0);
       draw(); updateOHLC();
     });
     const last = bars[bars.length - 1];
@@ -953,7 +976,7 @@
     $("indArrow").textContent = bar.classList.contains("collapsed") ? "▼" : "▲";
     try { localStorage.setItem("a30_indopen", bar.classList.contains("collapsed") ? "0" : "1"); } catch (_) {}
   };
-  $("btnFollow").onclick = () => { follow = true; offset = 0; $("btnFollow").classList.add("active"); draw(); };
+  $("btnFollow").onclick = () => { follow = true; $("btnFollow").classList.add("active"); tweenOffset(0); };
   ["pPCLen", "pBBN", "pBBK", "pMA", "pVolN", "pVolK", "cPC", "cBB", "cMA200", "cVol", "pScanSec", "pollSec", "pSnd", "w1m", "w3m", "w5m", "w15m", "w30m", "w1h", "w4h", "w1D"].forEach(id => {
     $(id).onchange = () => {
       persistParams(); restartScanTimer(); restartPolling();
